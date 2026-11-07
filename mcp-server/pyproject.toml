@@ -1,0 +1,7 @@
+[project]
+name = "flashguard-chaos"
+version = "0.1.0"
+description = "Deterministic virtual storage faults for FlashGuard"
+requires-python = ">=3.11"
+dependencies = ["mcp>=1.0,<2"]
+

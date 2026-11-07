@@ -1,0 +1,51 @@
+name: FlashGuard Deterministic Storage Verification
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  verify-mcp-harness:
+    name: Verify MCP Chaos Harness (Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install MCP dependencies & verify virtual drive fixtures
+        run: |
+          pip install 'mcp>=1.0,<2'
+          python -m unittest discover -p 'test_*.py' -v
+        working-directory: ./mcp-server
+
+  verify-flutter-engine:
+    name: Verify Flutter Integrity & Isolate Suite
+    runs-on: ubuntu-latest
+    needs: verify-mcp-harness
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.9'
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dart dependencies
+        run: flutter pub get
+        working-directory: ./app
+
+      - name: Run static analysis (flutter analyze)
+        run: flutter analyze --fatal-infos
+        working-directory: ./app
+
+      - name: Run Flutter tests
+        run: flutter test --reporter expanded
+        working-directory: ./app
