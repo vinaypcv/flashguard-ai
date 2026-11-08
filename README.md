@@ -4,7 +4,19 @@
 
 ![FlashGuard AI Architecture](docs/assets/flashguard_banner.svg)
 
-The current demo uses a simulated, directory-mounted volume engine, ready for platform-channel or Android Storage Access Framework (SAF) integration. The score uses simulated free space, and throughput drops are only a thermal-throttling heuristic. A verified copy is not permission to erase the original.
+![Windows audit demo showing a corrupt MP4 and exact duplicate group](docs/assets/windows_audit_demo.png)
+
+The current demo reads a chosen directory, including the virtual-drive fixture. Native volume access remains future work. The score uses simulated free space, and throughput drops are only a thermal-throttling heuristic. A verified copy is not permission to erase the original.
+
+## Verified Today vs. Production Roadmap
+
+| Area | Verified today | Production roadmap |
+|---|---|---|
+| Storage access | Windows demo reads a chosen directory and the virtual-drive fixture. | Add native drive discovery, Android Storage Access Framework access, and Apple security-scoped file access. |
+| Copy integrity | Streamed SHA-256 comparison, temporary `.part` files, refusal to overwrite an existing target, and basic JPEG/MP4 structure checks. | Add durable write guarantees, crash recovery, resumable transfers, and deeper media validation. |
+| Duplicate detection | Exact byte duplicates grouped by SHA-256. | Decode images for perceptual similarity and add user-reviewed duplicate actions. |
+| Telemetry | Per-file throughput samples and a demo score using simulated free-space headroom; speed drops are a heuristic. | Read real volume capacity and hardware telemetry, then calibrate and benchmark the score. |
+| Verification | Two Python fixture tests, five Flutter tests, clean static analysis, and a successful Windows build and run. | Exercise Android and Apple devices, larger media fixtures, and real disconnect scenarios. |
 
 ---
 
