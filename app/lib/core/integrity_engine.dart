@@ -12,6 +12,7 @@ enum MediaIntegrityStatus {
 
 class FileAuditResult {
   final String fileName;
+  final String destinationFileName;
   final int byteSize;
   final String sha256Hash;
   final MediaIntegrityStatus status;
@@ -22,6 +23,7 @@ class FileAuditResult {
 
   const FileAuditResult({
     required this.fileName,
+    required this.destinationFileName,
     required this.byteSize,
     required this.sha256Hash,
     required this.status,
@@ -124,10 +126,9 @@ class IntegrityEngine {
     }
     final timer = Stopwatch()..start();
     final fileName = source.uri.pathSegments.last;
-    final finalFile =
-        File('${destinationDir.path}${Platform.pathSeparator}$fileName');
-    final tempFile = File('${finalFile.path}.part');
-    final checkpointFile = File('${finalFile.path}.checkpoint.json');
+    late final File finalFile;
+    late final File tempFile;
+    late final File checkpointFile;
     RandomAccessFile? output;
     var discardPartial = false;
     try {
@@ -143,34 +144,34 @@ class IntegrityEngine {
             'Source SHA-256 differs from trusted digest', source.path);
       }
 
-      if (await finalFile.exists()) {
-        final existingBytes = await finalFile.length();
-        final existingDigest =
-            (await sha256.bind(finalFile.openRead()).single).toString();
-        final currentSourceDigest =
-            (await sha256.bind(source.openRead()).single).toString();
-        if (existingBytes != totalBytes ||
-            existingDigest != sourceDigest ||
-            currentSourceDigest != sourceDigest ||
-            await source.length() != totalBytes) {
-          throw FileSystemException(
-            'Destination already exists with different contents',
-            finalFile.path,
-          );
-        }
-        final status = await inspectMediaHeader(finalFile, mediaName: fileName);
-        if (status == MediaIntegrityStatus.ioError) {
-          throw FileSystemException('Media inspection failed', finalFile.path);
-        }
-        return FileAuditResult(
-          fileName: fileName,
-          byteSize: totalBytes,
-          sha256Hash: sourceDigest,
-          status: status,
-          transferMbps: 0,
-          reusedExistingCopy: true,
+      // Reuse a matching copy, or preserve conflicts under the first available
+      // numbered name. This keeps retries idempotent without overwriting data.
+      var copyNumber = 1;
+      while (true) {
+        final candidateName = copyNumber == 1
+            ? fileName
+            : _fileNameWithCopyNumber(fileName, copyNumber);
+        final candidate = File(
+          '${destinationDir.path}${Platform.pathSeparator}$candidateName',
         );
+        if (await candidate.exists()) {
+          final existingResult = await _reuseExistingCopy(
+            source: source,
+            candidate: candidate,
+            fileName: fileName,
+            totalBytes: totalBytes,
+            sourceDigest: sourceDigest,
+          );
+          if (existingResult != null) return existingResult;
+          copyNumber++;
+          continue;
+        }
+        finalFile = candidate;
+        break;
       }
+
+      tempFile = File('${finalFile.path}.part');
+      checkpointFile = File('${finalFile.path}.checkpoint.json');
 
       var resumedBytes = 0;
       var blockHashes = <String>[];
@@ -288,6 +289,7 @@ class IntegrityEngine {
       final seconds = timer.elapsedMicroseconds / 1e6;
       return FileAuditResult(
         fileName: fileName,
+        destinationFileName: finalFile.uri.pathSegments.last,
         byteSize: totalBytes,
         sha256Hash: sourceDigest,
         status: status,
@@ -308,6 +310,52 @@ class IntegrityEngine {
       }
       rethrow;
     }
+  }
+
+  static Future<FileAuditResult?> _reuseExistingCopy({
+    required File source,
+    required File candidate,
+    required String fileName,
+    required int totalBytes,
+    required String sourceDigest,
+  }) async {
+    final existingBytes = await candidate.length();
+    final existingDigest =
+        (await sha256.bind(candidate.openRead()).single).toString();
+    if (existingBytes != totalBytes || existingDigest != sourceDigest) {
+      return null;
+    }
+
+    final currentSourceDigest =
+        (await sha256.bind(source.openRead()).single).toString();
+    if (currentSourceDigest != sourceDigest ||
+        await source.length() != totalBytes) {
+      throw FileSystemException(
+        'Source changed while verifying an existing copy',
+        source.path,
+      );
+    }
+    final status = await inspectMediaHeader(candidate, mediaName: fileName);
+    if (status == MediaIntegrityStatus.ioError) {
+      throw FileSystemException('Media inspection failed', candidate.path);
+    }
+    return FileAuditResult(
+      fileName: fileName,
+      destinationFileName: candidate.uri.pathSegments.last,
+      byteSize: totalBytes,
+      sha256Hash: sourceDigest,
+      status: status,
+      transferMbps: 0,
+      reusedExistingCopy: true,
+    );
+  }
+
+  static String _fileNameWithCopyNumber(String fileName, int copyNumber) {
+    final extensionStart = fileName.lastIndexOf('.');
+    final splitAt = extensionStart > 0 ? extensionStart : fileName.length;
+    final name = fileName.substring(0, splitAt);
+    final extension = fileName.substring(splitAt);
+    return '$name ($copyNumber)$extension';
   }
 
   static int _uint32(List<int> bytes, int start) =>

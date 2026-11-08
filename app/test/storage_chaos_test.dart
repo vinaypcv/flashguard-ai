@@ -127,18 +127,29 @@ void main() {
     expect(second.duplicateGroups.length, 1);
   });
 
-  test('Refuses to overwrite a different destination and leaves no part file',
+  test('Preserves a different destination and saves under a unique name',
       () async {
     final destination = File('${tempVault.path}/IMG_001.jpg');
     await destination.writeAsString('keep me');
-    await expectLater(
-      IntegrityEngine.verifiedOffload(
-        source: File('${tempDrive.path}/IMG_001.jpg'),
-        destinationDir: tempVault,
-      ),
-      throwsA(isA<FileSystemException>()),
+    final source = File('${tempDrive.path}/IMG_001.jpg');
+    final result = await IntegrityEngine.verifiedOffload(
+      source: source,
+      destinationDir: tempVault,
     );
+
     expect(await destination.readAsString(), 'keep me');
+    expect(result.destinationFileName, 'IMG_001 (2).jpg');
+    expect(
+      await File('${tempVault.path}/${result.destinationFileName}')
+          .readAsBytes(),
+      await source.readAsBytes(),
+    );
+    final repeated = await IntegrityEngine.verifiedOffload(
+      source: source,
+      destinationDir: tempVault,
+    );
+    expect(repeated.destinationFileName, result.destinationFileName);
+    expect(repeated.reusedExistingCopy, isTrue);
     final parts = await tempVault
         .list()
         .where((entity) => entity.path.endsWith('.part'))

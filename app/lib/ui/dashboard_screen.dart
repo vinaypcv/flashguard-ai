@@ -202,6 +202,7 @@ class _FlashGuardDashboardState extends State<FlashGuardDashboard> {
                   title: Text(file.fileName),
                   subtitle: Text(
                     'SHA-256: ${file.sha256Hash.substring(0, 16)}… • ${file.byteSize} B'
+                    '${file.destinationFileName == file.fileName ? '' : '\nSaved as ${file.destinationFileName}'}'
                     '${file.resumeMessage == null ? '' : '\n${file.resumeMessage}'}',
                   ),
                   trailing: Chip(
