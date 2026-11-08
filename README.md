@@ -12,11 +12,19 @@ The current demo reads a chosen directory, including the virtual-drive fixture. 
 
 | Area | Verified today | Production roadmap |
 |---|---|---|
-| Storage access | Windows demo reads a chosen directory and the virtual-drive fixture. | Add native drive discovery, Android Storage Access Framework access, and Apple security-scoped file access. |
-| Copy integrity | Streamed SHA-256 comparison, temporary `.part` files, refusal to overwrite an existing target, and basic JPEG/MP4 structure checks. | Add durable write guarantees, crash recovery, resumable transfers, and deeper media validation. |
+| Storage access | Windows demo reads a chosen directory and the virtual-drive fixture. `ExternalVolumeProvider` separates capacity from the worker; mobile channel handlers explicitly report that access is pending. | Implement Android SAF document streams and persisted URI grants, iOS security-scoped bookmarks, and native volume capacity queries. A SAF URI is not a mount path. |
+| Copy integrity | SHA-256 comparison, completed-block `.part` checkpoints, validated resume, refusal to overwrite an existing target, and basic JPEG/MP4 structure checks. A trusted baseline hash detects a pre-existing bit flip. | Add durable write guarantees, platform stream resume, larger-media testing, and deeper media validation. |
 | Duplicate detection | Exact byte duplicates grouped by SHA-256. | Decode images for perceptual similarity and add user-reviewed duplicate actions. |
-| Telemetry | Per-file throughput samples and a demo score using simulated free-space headroom; speed drops are a heuristic. | Read real volume capacity and hardware telemetry, then calibrate and benchmark the score. |
-| Verification | Two Python fixture tests, five Flutter tests, clean static analysis, and a successful Windows build and run. | Exercise Android and Apple devices, larger media fixtures, and real disconnect scenarios. |
+| Telemetry | Per-file throughput samples and a demo score using `SimulatedVolumeProvider` free-space headroom; speed drops are a heuristic. | Query Android volume statistics where a SAF URI can be resolved, iOS `URLResourceValues`, and supported hardware telemetry; calibrate the score. |
+| Verification | Python and Flutter tests cover deterministic corruption and recovery cases; CI runs both suites. | Exercise Android and Apple devices, larger media fixtures, and real disconnect scenarios. |
+
+## Why This Matters to Sandisk's Consumer App Team
+
+| Product outcome | Engineering mechanism | Evidence boundary |
+|---|---|---|
+| Fewer avoidable support cases | Surface incomplete media and failed copy checks before a user discards the source. | Prototype detects fixture faults; no support or RMA reduction has been measured. |
+| More useful offline companion app | Group exact duplicates and show a local audit without uploading personal media. | Demo flow works on directories; mobile document-provider access remains pending. |
+| Faster storage-feature reviews | Repeatable MCP fault injection, a PR checklist, and CI verification. | Deterministic tests pass; team velocity has not been measured. |
 
 ---
 
@@ -52,7 +60,7 @@ flowchart LR
 ## 3. Key Technical Highlights
 
 * **Background batch (`Isolate.run`):** File copying, hashing, and header inspection run in a worker isolate.
-* **Temporary `.part` files:** Copies are flushed, re-hashed, and renamed after byte-exact verification. Interrupted copies are removed; resumable checkpoints are not implemented.
+* **Resumable `.part` files:** Completed blocks are flushed and recorded in `.checkpoint.json`. Resume re-hashes the source and saved blocks before reuse, then re-hashes the completed copy. The sidecar stores block digests, not a serialized SHA-256 state. A trusted original digest is required to detect corruption that predates the copy.
 * **Team Force-Multiplier (`mcp-server/server.py`):** A Model Context Protocol (MCP) server and custom `/verify-storage-pr` slash command that lets any Flutter engineer on the team spin up virtual drives with simulated hardware faults before opening a PR.
 * **Draft review log (`docs/AI_BLUFF_LOG.md`):** Records issues found while reviewing the supplied generated code. It does not claim benchmarks or agent runs that were not performed.
 

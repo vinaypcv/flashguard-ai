@@ -55,9 +55,9 @@ def create_virtual_drive(drive_name: str = "sandisk_extreme_ssd") -> str:
     # 2. Exact byte-for-byte duplicate under a different filename
     (drive_path / "IMG_001_copy.jpg").write_bytes(valid_jpg)
 
-    # 3. Valid MP4 skeleton (ftyp + moov atoms)
+    # 3. Valid MP4 skeleton (ftyp + media payload + moov atoms)
     ftyp = _box(b"ftyp", b"mp42\x00\x00\x00\x00mp42isom")
-    valid_mp4 = ftyp + _box(b"moov", b"\x11" * 4096)
+    valid_mp4 = ftyp + _box(b"mdat", b"\x44" * 4096) + _box(b"moov", b"\x11" * 64)
     (drive_path / "VID_4K_valid.mp4").write_bytes(valid_mp4)
 
     # 4. Corrupted/Truncated MP4 (ftyp present, moov atom missing due to sudden disconnect)
@@ -75,6 +75,40 @@ def simulate_mid_transfer_disconnect(target_file_path: str) -> str:
     truncated = data[: max(1, len(data) // 3)]
     path.write_bytes(truncated)
     return f"Simulated disconnect: truncated {path.name} from {len(data)}B to {len(truncated)}B."
+
+
+@mcp.tool()
+def inject_silent_bit_flip(target_file_path: str, byte_offset: int | None = None) -> str:
+    """Flip one bit inside a virtual MP4 mdat payload without changing its length or box headers."""
+    path = _sandbox_file(target_file_path)
+    if path.suffix.lower() not in {".mp4", ".mov"}:
+        raise ValueError("Bit-flip injection requires an MP4/MOV fixture")
+    with path.open("r+b") as media:
+        length = path.stat().st_size
+        offset = 0
+        payload_range = None
+        while offset + 8 <= length:
+            media.seek(offset)
+            header = media.read(8)
+            size = int.from_bytes(header[:4], "big")
+            if size < 8 or size > length - offset:
+                raise ValueError("Fixture has invalid MP4 box boundaries")
+            if header[4:] == b"mdat":
+                payload_range = (offset + 8, offset + size)
+                break
+            offset += size
+        if payload_range is None or payload_range[1] <= payload_range[0]:
+            raise ValueError("Fixture has no nonempty mdat payload")
+        start, end = payload_range
+        chosen = (start + end) // 2 if byte_offset is None else byte_offset
+        if not start <= chosen < end:
+            raise ValueError("Bit-flip offset must be inside the mdat payload")
+        media.seek(chosen)
+        original = media.read(1)[0]
+        media.seek(chosen)
+        media.write(bytes([original ^ 0x01]))
+        media.flush()
+    return f"Flipped one payload bit in {path.name} at offset {chosen}; file size remains {length}B."
 
 
 @mcp.tool()

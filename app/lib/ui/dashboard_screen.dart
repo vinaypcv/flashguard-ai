@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../core/isolate_worker.dart';
+import '../core/storage_provider.dart';
 
 class FlashGuardDashboard extends StatefulWidget {
   const FlashGuardDashboard({super.key});
@@ -29,9 +30,14 @@ class _FlashGuardDashboardState extends State<FlashGuardDashboard> {
 
     try {
       final destPath = '${Directory.systemTemp.path}/flashguard_verified_vault';
+      // The native bridge is intentionally not selected until mobile document
+      // streams are implemented. Directory access remains a demo capability.
+      final volume = await const SimulatedVolumeProvider()
+          .getVolumeStats(_sourceController.text.trim());
       final result = await IsolateOffloadWorker.runVerifiedBatch(
         sourceDirPath: _sourceController.text.trim(),
         destDirPath: destPath,
+        freeSpaceRatio: volume.freeSpaceRatio,
       );
       if (!mounted) return;
       setState(() {
@@ -195,7 +201,8 @@ class _FlashGuardDashboardState extends State<FlashGuardDashboard> {
                   ),
                   title: Text(file.fileName),
                   subtitle: Text(
-                    'SHA-256: ${file.sha256Hash.substring(0, 16)}… • ${file.byteSize} B',
+                    'SHA-256: ${file.sha256Hash.substring(0, 16)}… • ${file.byteSize} B'
+                    '${file.resumeMessage == null ? '' : '\n${file.resumeMessage}'}',
                   ),
                   trailing: Chip(
                     label: Text(

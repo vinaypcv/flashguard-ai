@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 
@@ -15,6 +16,8 @@ class FileAuditResult {
   final String sha256Hash;
   final MediaIntegrityStatus status;
   final double transferMbps;
+  final int resumedBytes;
+  final int transferredBytes;
 
   const FileAuditResult({
     required this.fileName,
@@ -22,9 +25,16 @@ class FileAuditResult {
     required this.sha256Hash,
     required this.status,
     required this.transferMbps,
+    this.resumedBytes = 0,
+    this.transferredBytes = 0,
   });
 
   bool get isCopyVerified => status == MediaIntegrityStatus.valid;
+
+  String? get resumeMessage => resumedBytes == 0 || byteSize == 0
+      ? null
+      : 'Resumed from ${(resumedBytes * 100 / byteSize).round()}% '
+          '($resumedBytes bytes reused)';
 }
 
 class IntegrityEngine {
@@ -96,20 +106,26 @@ class IntegrityEngine {
     }
   }
 
-  /// Copies to a temporary file, hashes both volumes, then promotes the copy.
+  /// Checkpoints complete blocks. A resumed run re-hashes the source and every
+  /// saved source/destination block before trusting a prior `.part` file.
   static Future<FileAuditResult> verifiedOffload({
     required File source,
     required Directory destinationDir,
     void Function(double progress)? onProgress,
+    String? expectedSha256,
+    int checkpointBlockBytes = 4 * 1024 * 1024,
   }) async {
+    if (checkpointBlockBytes <= 0) {
+      throw ArgumentError.value(checkpointBlockBytes, 'checkpointBlockBytes');
+    }
     final timer = Stopwatch()..start();
     final fileName = source.uri.pathSegments.last;
     final finalFile =
         File('${destinationDir.path}${Platform.pathSeparator}$fileName');
-    final tempFile = File(
-      '${finalFile.path}.${DateTime.now().microsecondsSinceEpoch}.part',
-    );
-    IOSink? output;
+    final tempFile = File('${finalFile.path}.part');
+    final checkpointFile = File('${finalFile.path}.checkpoint.json');
+    RandomAccessFile? output;
+    var discardPartial = false;
     try {
       if (!await destinationDir.exists()) {
         await destinationDir.create(recursive: true);
@@ -118,28 +134,115 @@ class IntegrityEngine {
         throw FileSystemException('Destination already exists', finalFile.path);
       }
       final totalBytes = await source.length();
-      output = tempFile.openWrite();
-      var copiedBytes = 0;
-      final sourceDigest = await sha256
-          .bind(
-            source.openRead().map((chunk) {
-              output!.add(chunk);
-              copiedBytes += chunk.length;
-              if (totalBytes > 0) onProgress?.call(copiedBytes / totalBytes);
-              return chunk;
-            }),
-          )
-          .single;
+      final sourceDigest =
+          (await sha256.bind(source.openRead()).single).toString();
+      if (expectedSha256 != null &&
+          sourceDigest != expectedSha256.toLowerCase()) {
+        throw FileSystemException(
+            'Source SHA-256 differs from trusted digest', source.path);
+      }
+
+      var resumedBytes = 0;
+      var blockHashes = <String>[];
+      if (await tempFile.exists() && await checkpointFile.exists()) {
+        try {
+          final checkpoint = jsonDecode(await checkpointFile.readAsString())
+              as Map<String, dynamic>;
+          final savedHashes =
+              (checkpoint['blockSha256'] as List).cast<String>();
+          final offset = checkpoint['offset'] as int;
+          if (checkpoint['version'] != 1 ||
+              checkpoint['sourcePath'] != source.absolute.path ||
+              checkpoint['sourceBytes'] != totalBytes ||
+              checkpoint['sourceSha256'] != sourceDigest ||
+              checkpoint['blockBytes'] != checkpointBlockBytes ||
+              offset < 0 ||
+              offset > totalBytes ||
+              savedHashes.length != (offset / checkpointBlockBytes).ceil() ||
+              await tempFile.length() < offset) {
+            throw const FormatException('Stale checkpoint');
+          }
+          final sourceReader = await source.open();
+          final partReader = await tempFile.open();
+          try {
+            for (var i = 0; i < savedHashes.length; i++) {
+              final count = (offset - i * checkpointBlockBytes)
+                  .clamp(0, checkpointBlockBytes);
+              final srcBlock = await sourceReader.read(count);
+              final dstBlock = await partReader.read(count);
+              if (srcBlock.length != count ||
+                  dstBlock.length != count ||
+                  sha256.convert(srcBlock).toString() != savedHashes[i] ||
+                  sha256.convert(dstBlock).toString() != savedHashes[i]) {
+                throw const FormatException('Checkpoint block mismatch');
+              }
+            }
+          } finally {
+            await sourceReader.close();
+            await partReader.close();
+          }
+          resumedBytes = offset;
+          blockHashes = savedHashes;
+        } on FormatException {
+          await tempFile.delete();
+          await checkpointFile.delete();
+        } on TypeError {
+          await tempFile.delete();
+          await checkpointFile.delete();
+        }
+      } else {
+        if (await tempFile.exists()) await tempFile.delete();
+        if (await checkpointFile.exists()) await checkpointFile.delete();
+      }
+
+      output = await tempFile.open(mode: FileMode.append);
+      await output.truncate(resumedBytes);
+      await output.setPosition(resumedBytes);
+      final input = await source.open();
+      var copiedBytes = resumedBytes;
+      try {
+        await input.setPosition(resumedBytes);
+        while (copiedBytes < totalBytes) {
+          final chunk = await input.read(
+            (totalBytes - copiedBytes).clamp(0, checkpointBlockBytes),
+          );
+          if (chunk.isEmpty) {
+            throw FileSystemException(
+                'Source ended during transfer', source.path);
+          }
+          await output.writeFrom(chunk);
+          await output.flush();
+          blockHashes.add(sha256.convert(chunk).toString());
+          copiedBytes += chunk.length;
+          await checkpointFile.writeAsString(
+              jsonEncode({
+                'version': 1,
+                'sourcePath': source.absolute.path,
+                'sourceBytes': totalBytes,
+                'sourceSha256': sourceDigest,
+                'blockBytes': checkpointBlockBytes,
+                'offset': copiedBytes,
+                'blockSha256': blockHashes,
+              }),
+              flush: true);
+          if (totalBytes > 0) onProgress?.call(copiedBytes / totalBytes);
+        }
+      } finally {
+        await input.close();
+      }
       await output.flush();
       await output.close();
       output = null;
 
-      final destinationDigest = await sha256.bind(tempFile.openRead()).single;
-      final currentSourceDigest = await sha256.bind(source.openRead()).single;
+      final destinationDigest =
+          (await sha256.bind(tempFile.openRead()).single).toString();
+      final currentSourceDigest =
+          (await sha256.bind(source.openRead()).single).toString();
       if (copiedBytes != totalBytes ||
           await source.length() != totalBytes ||
           destinationDigest != sourceDigest ||
           currentSourceDigest != sourceDigest) {
+        discardPartial = true;
         throw FileSystemException(
           'Source changed or SHA-256 mismatch',
           source.path,
@@ -150,14 +253,18 @@ class IntegrityEngine {
         throw FileSystemException('Media inspection failed', tempFile.path);
       }
       await tempFile.rename(finalFile.path);
+      if (await checkpointFile.exists()) await checkpointFile.delete();
       timer.stop();
       final seconds = timer.elapsedMicroseconds / 1e6;
       return FileAuditResult(
         fileName: fileName,
         byteSize: totalBytes,
-        sha256Hash: sourceDigest.toString(),
+        sha256Hash: sourceDigest,
         status: status,
-        transferMbps: seconds > 0 ? totalBytes / 1048576 / seconds : 0,
+        transferMbps:
+            seconds > 0 ? (totalBytes - resumedBytes) / 1048576 / seconds : 0,
+        resumedBytes: resumedBytes,
+        transferredBytes: totalBytes - resumedBytes,
       );
     } catch (_) {
       if (output != null) {
@@ -165,7 +272,10 @@ class IntegrityEngine {
           await output.close();
         } catch (_) {}
       }
-      if (await tempFile.exists()) await tempFile.delete();
+      if (discardPartial) {
+        if (await tempFile.exists()) await tempFile.delete();
+        if (await checkpointFile.exists()) await checkpointFile.delete();
+      }
       rethrow;
     }
   }

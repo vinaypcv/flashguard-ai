@@ -3,6 +3,7 @@ import 'dart:isolate';
 
 import 'integrity_engine.dart';
 import 'perceptual_dedup.dart';
+import 'storage_provider.dart';
 import 'telemetry_tracker.dart';
 
 class BatchOffloadSummary {
@@ -25,7 +26,7 @@ class IsolateOffloadWorker {
   static Future<BatchOffloadSummary> runVerifiedBatch({
     required String sourceDirPath,
     required String destDirPath,
-    double simulatedFreeSpaceRatio = 0.68,
+    double freeSpaceRatio = SimulatedVolumeProvider.defaultFreeSpaceRatio,
   }) {
     return Isolate.run(() async {
       final sourceDir = Directory(sourceDirPath);
@@ -72,7 +73,7 @@ class IsolateOffloadWorker {
       final healthReport = tracker.evaluate(
         totalFiles: results.length,
         verifiedFiles: verifiedCount,
-        freeSpaceRatio: simulatedFreeSpaceRatio,
+        freeSpaceRatio: freeSpaceRatio,
       );
 
       return BatchOffloadSummary(

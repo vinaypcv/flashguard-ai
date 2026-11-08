@@ -33,6 +33,24 @@ class ChaosFixtureTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             server.simulate_mid_transfer_disconnect(__file__)
 
+    def test_silent_bit_flip_preserves_structure_and_size_but_changes_digest(self):
+        mount = server.create_virtual_drive("unit_test_bit_flip")
+        root = Path(mount.split(": ", 1)[1])
+        target = root / "VID_4K_valid.mp4"
+        before = server.verify_drive_ground_truth(str(root))[target.name]
+        assert before["structurally_valid"]
+
+        server.inject_silent_bit_flip(str(target))
+        after = server.verify_drive_ground_truth(str(root))[target.name]
+        self.assertEqual(after["bytes"], before["bytes"])
+        self.assertTrue(after["structurally_valid"])
+        self.assertNotEqual(after["sha256"], before["sha256"])
+
+        with self.assertRaises(ValueError):
+            server.inject_silent_bit_flip(__file__)
+        with self.assertRaises(ValueError):
+            server.inject_silent_bit_flip(str(target), byte_offset=0)
+
 
 if __name__ == "__main__":
     unittest.main()
