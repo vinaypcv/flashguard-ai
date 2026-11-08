@@ -107,7 +107,28 @@ void main() {
     expect(dupFiles, containsAll(['IMG_001.jpg', 'IMG_001_dup.jpg']));
   });
 
-  test('Refuses to overwrite a destination and leaves no part file', () async {
+  test('Reaudits an existing verified vault without retransferring files',
+      () async {
+    final first = await IsolateOffloadWorker.runVerifiedBatch(
+      sourceDirPath: tempDrive.path,
+      destDirPath: tempVault.path,
+    );
+    final second = await IsolateOffloadWorker.runVerifiedBatch(
+      sourceDirPath: tempDrive.path,
+      destDirPath: tempVault.path,
+    );
+
+    expect(second.results.length, first.results.length);
+    expect(second.results.every((result) => result.reusedExistingCopy), isTrue);
+    expect(
+        second.results.every((result) => result.transferredBytes == 0), isTrue);
+    expect(second.results.first.resumeMessage,
+        'Existing copy reverified (0 bytes transferred)');
+    expect(second.duplicateGroups.length, 1);
+  });
+
+  test('Refuses to overwrite a different destination and leaves no part file',
+      () async {
     final destination = File('${tempVault.path}/IMG_001.jpg');
     await destination.writeAsString('keep me');
     await expectLater(

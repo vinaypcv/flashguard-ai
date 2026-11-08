@@ -18,6 +18,7 @@ class FileAuditResult {
   final double transferMbps;
   final int resumedBytes;
   final int transferredBytes;
+  final bool reusedExistingCopy;
 
   const FileAuditResult({
     required this.fileName,
@@ -27,14 +28,17 @@ class FileAuditResult {
     required this.transferMbps,
     this.resumedBytes = 0,
     this.transferredBytes = 0,
+    this.reusedExistingCopy = false,
   });
 
   bool get isCopyVerified => status == MediaIntegrityStatus.valid;
 
-  String? get resumeMessage => resumedBytes == 0 || byteSize == 0
-      ? null
-      : 'Resumed from ${(resumedBytes * 100 / byteSize).round()}% '
-          '($resumedBytes bytes reused)';
+  String? get resumeMessage => reusedExistingCopy
+      ? 'Existing copy reverified (0 bytes transferred)'
+      : resumedBytes == 0 || byteSize == 0
+          ? null
+          : 'Resumed from ${(resumedBytes * 100 / byteSize).round()}% '
+              '($resumedBytes bytes reused)';
 }
 
 class IntegrityEngine {
@@ -130,9 +134,6 @@ class IntegrityEngine {
       if (!await destinationDir.exists()) {
         await destinationDir.create(recursive: true);
       }
-      if (await finalFile.exists()) {
-        throw FileSystemException('Destination already exists', finalFile.path);
-      }
       final totalBytes = await source.length();
       final sourceDigest =
           (await sha256.bind(source.openRead()).single).toString();
@@ -140,6 +141,35 @@ class IntegrityEngine {
           sourceDigest != expectedSha256.toLowerCase()) {
         throw FileSystemException(
             'Source SHA-256 differs from trusted digest', source.path);
+      }
+
+      if (await finalFile.exists()) {
+        final existingBytes = await finalFile.length();
+        final existingDigest =
+            (await sha256.bind(finalFile.openRead()).single).toString();
+        final currentSourceDigest =
+            (await sha256.bind(source.openRead()).single).toString();
+        if (existingBytes != totalBytes ||
+            existingDigest != sourceDigest ||
+            currentSourceDigest != sourceDigest ||
+            await source.length() != totalBytes) {
+          throw FileSystemException(
+            'Destination already exists with different contents',
+            finalFile.path,
+          );
+        }
+        final status = await inspectMediaHeader(finalFile, mediaName: fileName);
+        if (status == MediaIntegrityStatus.ioError) {
+          throw FileSystemException('Media inspection failed', finalFile.path);
+        }
+        return FileAuditResult(
+          fileName: fileName,
+          byteSize: totalBytes,
+          sha256Hash: sourceDigest,
+          status: status,
+          transferMbps: 0,
+          reusedExistingCopy: true,
+        );
       }
 
       var resumedBytes = 0;
