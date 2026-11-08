@@ -1,90 +1,75 @@
-# FlashGuard AI — Hardware-Aware Consumer Storage Companion & Chaos MCP Harness
+# FlashGuard AI
 
-> A Flutter storage verification prototype with a Python MCP fault-injection harness.
+### Trust the copy before you retire the source.
+
+FlashGuard turns a routine media offload into an auditable transfer: hash the source, copy into a resumable temporary file, verify the destination, and call out media that still needs human attention. The Flutter desktop demo runs the file work in a background isolate; a Python MCP server supplies repeatable storage failures for tests and AI-assisted reviews.
+
+[![FlashGuard verification](https://github.com/vinaypcv/flashguard-ai/actions/workflows/verify.yml/badge.svg)](https://github.com/vinaypcv/flashguard-ai/actions/workflows/verify.yml)
 
 ![FlashGuard AI Architecture](docs/assets/flashguard_banner.svg)
 
 ![Windows audit demo showing a corrupt MP4 and exact duplicate group](docs/assets/windows_audit_demo.png)
 
-The current demo reads a chosen directory, including the virtual-drive fixture. Native volume access remains future work. The score uses simulated free space, and throughput drops are only a thermal-throttling heuristic. A verified copy is not permission to erase the original.
+## The moment this protects
 
-## Verified Today vs. Production Roadmap
+A creator copies footage from a card, sees matching file sizes, and clears the card. A truncated container or a changed payload can still be missed by that size check. FlashGuard makes the copy's evidence visible before that decision. The demo flags a truncated MP4, groups byte-identical photos, and keeps the original source untouched.
 
-| Area | Verified today | Production roadmap |
+| Consumer moment | What the prototype does | Why a storage team cares |
 |---|---|---|
-| Storage access | Windows demo reads a chosen directory and the virtual-drive fixture. `ExternalVolumeProvider` separates capacity from the worker; mobile channel handlers explicitly report that access is pending. | Implement Android SAF document streams and persisted URI grants, iOS security-scoped bookmarks, and native volume capacity queries. A SAF URI is not a mount path. |
-| Copy integrity | SHA-256 comparison, completed-block `.part` checkpoints, validated resume, re-audit of matching existing copies without retransferring, refusal to overwrite mismatched targets, and basic JPEG/MP4 structure checks. A trusted baseline hash detects a pre-existing bit flip. | Add durable write guarantees, platform stream resume, larger-media testing, and deeper media validation. |
-| Duplicate detection | Exact byte duplicates grouped by SHA-256. | Decode images for perceptual similarity and add user-reviewed duplicate actions. |
-| Telemetry | Per-file throughput samples and a demo score using `SimulatedVolumeProvider` free-space headroom; speed drops are a heuristic. | Query Android volume statistics where a SAF URI can be resolved, iOS `URLResourceValues`, and supported hardware telemetry; calibrate the score. |
-| Verification | Python and Flutter tests cover deterministic corruption and recovery cases; CI runs both suites. | Exercise Android and Apple devices, larger media fixtures, and real disconnect scenarios. |
+| A cable disconnects mid-copy | Retains completed `.part` blocks, validates their hashes on restart, and resumes only trusted bytes. | Recovery avoids restarting a large transfer while preserving evidence of what was copied. |
+| A file looks intact by size | Checks SHA-256 and JPEG/MP4 structure; the chaos fixture flips one bit inside `mdat` without changing file size or box headers. | Tests catch a class of silent changes that size and extension checks miss. Pre-existing corruption needs a trusted original digest. |
+| A user repeats an audit | Rehashes an identical vault copy with zero bytes transferred; a conflicting old copy stays intact and the new one receives a numbered name. | Repeat use is safe and does not silently replace a user's data. |
+| An engineer reviews storage code | Runs deterministic Python faults and Flutter tests in CI, with an AI review command and PR checklist. | Edge cases become reproducible review evidence instead of anecdotal bug reports. |
 
-## Why This Matters to Sandisk's Consumer App Team
+These are engineering mechanisms, not measured claims about reduced RMAs, retention, or team velocity.
 
-| Product outcome | Engineering mechanism | Evidence boundary |
-|---|---|---|
-| Fewer avoidable support cases | Surface incomplete media and failed copy checks before a user discards the source. | Prototype detects fixture faults; no support or RMA reduction has been measured. |
-| More useful offline companion app | Group exact duplicates and show a local audit without uploading personal media. | Demo flow works on directories; mobile document-provider access remains pending. |
-| Faster storage-feature reviews | Repeatable MCP fault injection, a PR checklist, and CI verification. | Deterministic tests pass; team velocity has not been measured. |
-
----
-
-## 1. Why This Exists (The Unsolved Consumer Storage Problem)
-Millions of photographers, filmmakers, and everyday consumers offload irreplaceable memories onto Sandisk portable SSDs and SD cards. Yet mobile companion apps treat external storage as an infallible, passive folder tree—leaving three critical gaps:
-1. **Silent Data Corruption:** Abrupt USB-C disconnects or power drops truncate MP4/MOV `moov` atoms or JPEG EOF markers without warning, leading users to delete originals from their phones before discovering unplayable files.
-2. **Thermal Cliffing Blindness:** Sustained high-bitrate transfers trigger flash controller thermal throttling without actionable diagnostics or health confidence scoring in the mobile UI.
-3. **Cloud-Dependent Media Triage:** Users cannot deduplicate burst shoots or audit terabytes of private local media without uploading files to paid cloud services.
-
----
-
-## 2. Holistic System Architecture
+## How the proof fits together
 
 ```mermaid
 flowchart LR
-    subgraph AI_Dev_Loop["AI-Native Verification Loop (Team Multiplier)"]
-        CC["Claude Code / Cursor"] <--> MCP["flashguard-chaos MCP Server"]
-        MCP --> VDrive["Virtual SSD + Injected Faults\n(Truncated MP4, Cable Yank, Burst Dups)"]
+    subgraph Dev["Repeatable verification"]
+        MCP["Python MCP chaos server"] --> VDrive["Virtual drive: valid media, duplicates, truncation, bit flip"]
+        Tests["Python + Flutter tests"] --> CI["GitHub Actions"]
     end
 
-    subgraph Flutter_App["Flutter Consumer Companion (Isolate-Backed)"]
-        UI["Material 3 Dashboard\n(Drive Confidence Score 0-100)"] <--> ISO["Background Dart Isolate Worker"]
-        ISO --> INT["IntegrityEngine\n(Streaming SHA-256 + Binary Header Forensics)"]
-        ISO --> TEL["TelemetryTracker\n(Throughput Curve & Thermal Cliff Detector)"]
-        ISO --> DEDUP["Exact SHA-256\nDuplicate Groups"]
+    subgraph App["Flutter desktop demo"]
+        UI["Audit dashboard"] --> ISO["Background Dart isolate"]
+        ISO --> INT["SHA-256 copy and checkpoint validation"]
+        ISO --> TEL["Throughput samples + demo score"]
+        ISO --> DEDUP["Exact duplicate groups"]
     end
 
     VDrive --> ISO
 ```
 
----
+## Run the Windows proof
 
-## 3. Key Technical Highlights
+Requires Python 3.11, Flutter 3.47.9, and Windows desktop support. From the repository root in PowerShell:
 
-* **Background batch (`Isolate.run`):** File copying, hashing, and header inspection run in a worker isolate.
-* **Resumable `.part` files:** Completed blocks are flushed and recorded in `.checkpoint.json`. Resume re-hashes the source and saved blocks before reuse, then re-hashes the completed copy. The sidecar stores block digests, not a serialized SHA-256 state. A trusted original digest is required to detect corruption that predates the copy.
-* **Team Force-Multiplier (`mcp-server/server.py`):** A Model Context Protocol (MCP) server and custom `/verify-storage-pr` slash command that lets any Flutter engineer on the team spin up virtual drives with simulated hardware faults before opening a PR.
-* **Draft review log (`docs/AI_BLUFF_LOG.md`):** Records issues found while reviewing the supplied generated code. It does not claim benchmarks or agent runs that were not performed.
-
----
-
-## 4. Quick Start & Verification
-
-### Run the Flutter Verification Suite
-```bash
-cd app
-flutter pub get
-flutter analyze --fatal-infos
-flutter test test/storage_chaos_test.dart
-flutter run
-```
-
-### Run the MCP Chaos Server (Claude Code / Cursor)
-```bash
+```powershell
 cd mcp-server
-pip install 'mcp>=1.0,<2'
-python server.py
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install "mcp>=1.0,<2"
+.\.venv\Scripts\python.exe -c "import server; print(server.create_virtual_drive())"
+cd ..\app
+flutter pub get
+flutter run -d windows
 ```
 
----
+Click **Run Verified Offload & Health Audit**. The virtual drive includes a valid MP4, a truncated MP4, and two byte-identical JPEGs. Click again to re-audit. If an older fixture left a different file in the demo vault, FlashGuard keeps it and saves the current copy under a numbered name. Exit `flutter run` with `q`; relaunch it after pulling code changes.
 
-## 5. Engineering Thesis: AI-Native Velocity Meets Storage Rigor
-> *"AI coding agents have collapsed the cost of writing boilerplate Flutter widgets to near zero. That shifts the true engineering bottleneck to **specification clarity, deterministic verification harnesses, and domain empathy**. In consumer storage, where silent data loss is unacceptable, an AI-native engineer's highest leverage comes from building automated fault-injection sandboxes that verify every line of agent-generated I/O code before it ever reaches a senior engineer's review queue."*
+Run the checks independently:
+
+```powershell
+cd mcp-server
+.\.venv\Scripts\python.exe -m unittest discover -p 'test_*.py' -v
+cd ..\app
+flutter analyze --fatal-infos
+flutter test --reporter expanded
+```
+
+If Flutter is installed in this checkout under `.tools/flutter`, replace `flutter` with `..\.tools\flutter\bin\flutter.bat`. The [verification record](docs/VERIFICATION.md) documents the test evidence and limits. The [PR template](.github/pull_request_template.md) and [`/verify-storage-pr`](.claude/commands/verify-storage-pr.md) make the same checks repeatable during AI-assisted development.
+
+## Scope
+
+This is a directory-backed Windows prototype. `ExternalVolumeProvider` separates capacity data from the audit worker, but Android SAF and iOS security-scoped volume handlers currently return an explicit pending error. The dashboard uses simulated free-space capacity and a throughput-drop heuristic, not physical drive health telemetry. No source file is deleted, and a successful copy check is not permission to erase the original.
