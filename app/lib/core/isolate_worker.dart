@@ -69,7 +69,7 @@ class IsolateOffloadWorker {
         skipSimilarMatchNames: duplicateCopies,
       );
 
-      final verifiedCount = results.where((r) => r.isCopyVerified).length;
+      final verifiedCount = results.where((r) => r.byteForByteVerified).length;
       final healthReport = tracker.evaluate(
         totalFiles: results.length,
         verifiedFiles: verifiedCount,

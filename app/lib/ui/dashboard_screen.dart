@@ -191,23 +191,29 @@ class _FlashGuardDashboardState extends State<FlashGuardDashboard> {
             const SizedBox(height: 8),
 
             ..._summary!.results.map((file) {
-              final isSafe = file.isCopyVerified;
+              final mediaIsValid = file.isMediaStructurallyValid;
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
                 child: ListTile(
                   leading: Icon(
-                    isSafe ? Icons.check_circle : Icons.warning_amber_rounded,
-                    color: isSafe ? Colors.green : Colors.red,
+                    mediaIsValid
+                        ? Icons.check_circle
+                        : Icons.warning_amber_rounded,
+                    color: mediaIsValid ? Colors.green : Colors.orange,
                   ),
                   title: Text(file.fileName),
                   subtitle: Text(
+                    'Byte copy: ${file.byteForByteVerified ? 'VERIFIED' : 'UNVERIFIED'}\n'
+                    'Media structure: ${file.mediaIntegrityLabel}\n'
                     'SHA-256: ${file.sha256Hash.substring(0, 16)}… • ${file.byteSize} B'
                     '${file.destinationFileName == file.fileName ? '' : '\nSaved as ${file.destinationFileName}'}'
                     '${file.resumeMessage == null ? '' : '\n${file.resumeMessage}'}',
                   ),
                   trailing: Chip(
                     label: Text(
-                      isSafe ? 'COPY VERIFIED' : file.status.name.toUpperCase(),
+                      file.byteForByteVerified
+                          ? 'BYTES VERIFIED'
+                          : 'COPY UNVERIFIED',
                     ),
                   ),
                 ),

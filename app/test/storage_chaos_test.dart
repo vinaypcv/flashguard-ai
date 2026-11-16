@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
@@ -75,7 +76,7 @@ void main() {
   });
 
   test(
-    'Flags truncated MP4 without moov atom as unverified',
+    'Separates a verified byte copy from truncated media structure',
     () async {
       final summary = await IsolateOffloadWorker.runVerifiedBatch(
         sourceDirPath: tempDrive.path,
@@ -89,10 +90,19 @@ void main() {
         (r) => r.fileName == 'VID_ok.mp4',
       );
 
-      expect(corruptAudit.status, MediaIntegrityStatus.truncatedContainer);
-      expect(corruptAudit.isCopyVerified, isFalse);
-      expect(validAudit.status, MediaIntegrityStatus.valid);
-      expect(validAudit.isCopyVerified, isTrue);
+      expect(corruptAudit.mediaStatus, MediaIntegrityStatus.truncatedContainer);
+      expect(corruptAudit.byteForByteVerified, isTrue);
+      expect(corruptAudit.byteForByteVerified, isTrue);
+      expect(corruptAudit.isMediaStructurallyValid, isFalse);
+      expect(
+        await File('${tempVault.path}/VID_disconnect_corrupt.mp4')
+            .readAsBytes(),
+        await File('${tempDrive.path}/VID_disconnect_corrupt.mp4')
+            .readAsBytes(),
+      );
+      expect(validAudit.mediaStatus, MediaIntegrityStatus.valid);
+      expect(validAudit.byteForByteVerified, isTrue);
+      expect(validAudit.isMediaStructurallyValid, isTrue);
     },
   );
 
@@ -187,6 +197,74 @@ void main() {
         await source.readAsBytes());
     expect(await File('${tempVault.path}/IMG_001.jpg.checkpoint.json').exists(),
         isFalse);
+  });
+
+  test('Resumes a version 1 checkpoint and upgrades its metadata', () async {
+    final source = File('${tempDrive.path}/IMG_001.jpg');
+    final sourceBytes = await source.readAsBytes();
+    final savedBlock = sourceBytes.take(128).toList();
+    final part = File('${tempVault.path}/IMG_001.jpg.part');
+    await part.writeAsBytes(savedBlock);
+    await File('${tempVault.path}/IMG_001.jpg.checkpoint.json')
+        .writeAsString(jsonEncode({
+      'version': 1,
+      'sourcePath': source.absolute.path,
+      'sourceBytes': sourceBytes.length,
+      'sourceSha256': sha256.convert(sourceBytes).toString(),
+      'blockBytes': 128,
+      'offset': 128,
+      'blockSha256': [sha256.convert(savedBlock).toString()],
+    }));
+
+    final result = await IntegrityEngine.verifiedOffload(
+      source: source,
+      destinationDir: tempVault,
+      checkpointBlockBytes: 128,
+    );
+
+    expect(result.resumedBytes, 128);
+    expect(
+      await File('${tempVault.path}/IMG_001.jpg').readAsBytes(),
+      sourceBytes,
+    );
+    expect(await part.exists(), isFalse);
+  });
+
+  test('Falls back to the prior checkpoint when the newest snapshot is torn',
+      () async {
+    final source = File('${tempDrive.path}/IMG_001.jpg');
+    await expectLater(
+      IntegrityEngine.verifiedOffload(
+        source: source,
+        destinationDir: tempVault,
+        checkpointBlockBytes: 128,
+        onProgress: (progress) {
+          if (progress >= 0.7) {
+            throw const FileSystemException('Simulated disconnect');
+          }
+        },
+      ),
+      throwsA(isA<FileSystemException>()),
+    );
+
+    final checkpoint = File('${tempVault.path}/IMG_001.jpg.checkpoint.json');
+    final backup = File('${checkpoint.path}.bak');
+    expect(await backup.exists(), isTrue);
+    await checkpoint.writeAsString('{torn checkpoint');
+
+    final result = await IntegrityEngine.verifiedOffload(
+      source: source,
+      destinationDir: tempVault,
+      checkpointBlockBytes: 128,
+    );
+
+    expect(result.resumedBytes, 256);
+    expect(
+      await File('${tempVault.path}/IMG_001.jpg').readAsBytes(),
+      await source.readAsBytes(),
+    );
+    expect(await backup.exists(), isFalse);
+    expect(await checkpoint.exists(), isFalse);
   });
 
   test('Discards a tampered checkpoint block and restarts safely', () async {

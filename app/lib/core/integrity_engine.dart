@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 
@@ -15,7 +15,13 @@ class FileAuditResult {
   final String destinationFileName;
   final int byteSize;
   final String sha256Hash;
-  final MediaIntegrityStatus status;
+
+  /// Structural result from the lightweight media container inspection.
+  final MediaIntegrityStatus mediaStatus;
+
+  /// True only because an audit result is returned after source and destination
+  /// SHA-256 digests have matched and the verified part has been promoted.
+  final bool byteForByteVerified;
   final double transferMbps;
   final int resumedBytes;
   final int transferredBytes;
@@ -26,14 +32,30 @@ class FileAuditResult {
     required this.destinationFileName,
     required this.byteSize,
     required this.sha256Hash,
-    required this.status,
+    required this.mediaStatus,
+    required this.byteForByteVerified,
     required this.transferMbps,
     this.resumedBytes = 0,
     this.transferredBytes = 0,
     this.reusedExistingCopy = false,
   });
 
-  bool get isCopyVerified => status == MediaIntegrityStatus.valid;
+  /// Compatibility alias for callers that previously read the media status.
+  @Deprecated('Use mediaStatus to describe structure or byteForByteVerified')
+  MediaIntegrityStatus get status => mediaStatus;
+
+  @Deprecated('Use byteForByteVerified')
+  bool get isCopyVerified => byteForByteVerified;
+
+  bool get isMediaStructurallyValid =>
+      mediaStatus == MediaIntegrityStatus.valid;
+
+  String get mediaIntegrityLabel => switch (mediaStatus) {
+        MediaIntegrityStatus.valid => 'VALID',
+        MediaIntegrityStatus.corruptedHeader => 'CORRUPTED HEADER',
+        MediaIntegrityStatus.truncatedContainer => 'TRUNCATED CONTAINER',
+        MediaIntegrityStatus.ioError => 'INSPECTION ERROR',
+      };
 
   String? get resumeMessage => reusedExistingCopy
       ? 'Existing copy reverified (0 bytes transferred)'
@@ -129,6 +151,8 @@ class IntegrityEngine {
     late final File finalFile;
     late final File tempFile;
     late final File checkpointFile;
+    late final File checkpointBackupFile;
+    late final File checkpointStagingFile;
     RandomAccessFile? output;
     var discardPartial = false;
     try {
@@ -172,29 +196,44 @@ class IntegrityEngine {
 
       tempFile = File('${finalFile.path}.part');
       checkpointFile = File('${finalFile.path}.checkpoint.json');
+      checkpointBackupFile = File('${checkpointFile.path}.bak');
+      checkpointStagingFile = File('${checkpointFile.path}.tmp');
 
       var resumedBytes = 0;
       var blockHashes = <String>[];
-      if (await tempFile.exists() && await checkpointFile.exists()) {
-        try {
-          final checkpoint = jsonDecode(await checkpointFile.readAsString())
-              as Map<String, dynamic>;
+      final checkpointFiles = [checkpointFile, checkpointBackupFile];
+      final checkpointCandidates = <Map<String, dynamic>>[];
+      for (final candidateFile in checkpointFiles) {
+        if (!await candidateFile.exists()) continue;
+        final candidate = await _readCheckpoint(candidateFile);
+        if (candidate != null &&
+            candidate['sourcePath'] == source.absolute.path &&
+            candidate['sourceBytes'] == totalBytes &&
+            candidate['sourceSha256'] == sourceDigest &&
+            candidate['blockBytes'] == checkpointBlockBytes) {
+          candidate['_journalPath'] = candidateFile.path;
+          checkpointCandidates.add(candidate);
+        }
+      }
+      checkpointCandidates.sort(
+          (a, b) => (b['generation'] as int).compareTo(a['generation'] as int));
+
+      var checkpointResumed = false;
+      if (await tempFile.exists()) {
+        for (final checkpoint in checkpointCandidates) {
+          final offset = checkpoint['offset'] as int;
           final savedHashes =
               (checkpoint['blockSha256'] as List).cast<String>();
-          final offset = checkpoint['offset'] as int;
-          if (checkpoint['version'] != 1 ||
-              checkpoint['sourcePath'] != source.absolute.path ||
-              checkpoint['sourceBytes'] != totalBytes ||
-              checkpoint['sourceSha256'] != sourceDigest ||
-              checkpoint['blockBytes'] != checkpointBlockBytes ||
-              offset < 0 ||
+          if (offset < 0 ||
               offset > totalBytes ||
               savedHashes.length != (offset / checkpointBlockBytes).ceil() ||
               await tempFile.length() < offset) {
-            throw const FormatException('Stale checkpoint');
+            continue;
           }
+
           final sourceReader = await source.open();
           final partReader = await tempFile.open();
+          var blocksMatch = true;
           try {
             for (var i = 0; i < savedHashes.length; i++) {
               final count = (offset - i * checkpointBlockBytes)
@@ -205,25 +244,51 @@ class IntegrityEngine {
                   dstBlock.length != count ||
                   sha256.convert(srcBlock).toString() != savedHashes[i] ||
                   sha256.convert(dstBlock).toString() != savedHashes[i]) {
-                throw const FormatException('Checkpoint block mismatch');
+                blocksMatch = false;
+                break;
               }
             }
           } finally {
             await sourceReader.close();
             await partReader.close();
           }
+          if (!blocksMatch) continue;
+
           resumedBytes = offset;
           blockHashes = savedHashes;
-        } on FormatException {
-          await tempFile.delete();
-          await checkpointFile.delete();
-        } on TypeError {
-          await tempFile.delete();
-          await checkpointFile.delete();
+          checkpointResumed = true;
+
+          // If the newest usable snapshot was the backup, restore it as the
+          // primary before the next write rotates journal generations.
+          if (checkpoint['_journalPath'] == checkpointBackupFile.path) {
+            if (await checkpointFile.exists()) await checkpointFile.delete();
+            await checkpointBackupFile.rename(checkpointFile.path);
+            checkpointCandidates
+              ..clear()
+              ..add({
+                'generation': checkpoint['generation'],
+                'sourcePath': checkpoint['sourcePath'],
+                'sourceBytes': checkpoint['sourceBytes'],
+                'sourceSha256': checkpoint['sourceSha256'],
+                'blockBytes': checkpoint['blockBytes'],
+                'offset': offset,
+                'blockSha256': List<String>.from(savedHashes),
+              });
+          }
+          break;
         }
-      } else {
+      }
+
+      if (!checkpointResumed) {
         if (await tempFile.exists()) await tempFile.delete();
-        if (await checkpointFile.exists()) await checkpointFile.delete();
+        for (final file in [...checkpointFiles, checkpointStagingFile]) {
+          if (await file.exists()) await file.delete();
+        }
+        checkpointCandidates.clear();
+      } else if (await checkpointStagingFile.exists()) {
+        // A staged snapshot was never promoted; the active or backup snapshot
+        // is the recovery point, so discard the incomplete staging file.
+        await checkpointStagingFile.delete();
       }
 
       output = await tempFile.open(mode: FileMode.append);
@@ -245,17 +310,38 @@ class IntegrityEngine {
           await output.flush();
           blockHashes.add(sha256.convert(chunk).toString());
           copiedBytes += chunk.length;
-          await checkpointFile.writeAsString(
-              jsonEncode({
-                'version': 1,
-                'sourcePath': source.absolute.path,
-                'sourceBytes': totalBytes,
-                'sourceSha256': sourceDigest,
-                'blockBytes': checkpointBlockBytes,
-                'offset': copiedBytes,
-                'blockSha256': blockHashes,
-              }),
-              flush: true);
+          final previousGeneration = checkpointCandidates.isEmpty
+              ? 0
+              : checkpointCandidates
+                  .map((checkpoint) => checkpoint['generation'] as int)
+                  .reduce((a, b) => a > b ? a : b);
+          await _writeCheckpoint(
+            checkpointFile: checkpointFile,
+            backupFile: checkpointBackupFile,
+            stagingFile: checkpointStagingFile,
+            checkpoint: {
+              'version': 2,
+              'generation': previousGeneration + 1,
+              'sourcePath': source.absolute.path,
+              'sourceBytes': totalBytes,
+              'sourceSha256': sourceDigest,
+              'blockBytes': checkpointBlockBytes,
+              'offset': copiedBytes,
+              'blockSha256': blockHashes,
+            },
+          );
+          checkpointCandidates
+            ..clear()
+            ..add({
+              'version': 2,
+              'generation': previousGeneration + 1,
+              'sourcePath': source.absolute.path,
+              'sourceBytes': totalBytes,
+              'sourceSha256': sourceDigest,
+              'blockBytes': checkpointBlockBytes,
+              'offset': copiedBytes,
+              'blockSha256': List<String>.from(blockHashes),
+            });
           if (totalBytes > 0) onProgress?.call(copiedBytes / totalBytes);
         }
       } finally {
@@ -284,7 +370,18 @@ class IntegrityEngine {
         throw FileSystemException('Media inspection failed', tempFile.path);
       }
       await tempFile.rename(finalFile.path);
-      if (await checkpointFile.exists()) await checkpointFile.delete();
+      for (final file in [
+        checkpointFile,
+        checkpointBackupFile,
+        checkpointStagingFile,
+      ]) {
+        try {
+          if (await file.exists()) await file.delete();
+        } on FileSystemException {
+          // Promotion is already complete and verified. A leftover checkpoint
+          // is harmless and must not turn a successful copy into a failed one.
+        }
+      }
       timer.stop();
       final seconds = timer.elapsedMicroseconds / 1e6;
       return FileAuditResult(
@@ -292,7 +389,8 @@ class IntegrityEngine {
         destinationFileName: finalFile.uri.pathSegments.last,
         byteSize: totalBytes,
         sha256Hash: sourceDigest,
-        status: status,
+        mediaStatus: status,
+        byteForByteVerified: true,
         transferMbps:
             seconds > 0 ? (totalBytes - resumedBytes) / 1048576 / seconds : 0,
         resumedBytes: resumedBytes,
@@ -306,7 +404,13 @@ class IntegrityEngine {
       }
       if (discardPartial) {
         if (await tempFile.exists()) await tempFile.delete();
-        if (await checkpointFile.exists()) await checkpointFile.delete();
+        for (final checkpoint in [
+          checkpointFile,
+          checkpointBackupFile,
+          checkpointStagingFile,
+        ]) {
+          if (await checkpoint.exists()) await checkpoint.delete();
+        }
       }
       rethrow;
     }
@@ -344,7 +448,8 @@ class IntegrityEngine {
       destinationFileName: candidate.uri.pathSegments.last,
       byteSize: totalBytes,
       sha256Hash: sourceDigest,
-      status: status,
+      mediaStatus: status,
+      byteForByteVerified: true,
       transferMbps: 0,
       reusedExistingCopy: true,
     );
@@ -356,6 +461,73 @@ class IntegrityEngine {
     final name = fileName.substring(0, splitAt);
     final extension = fileName.substring(splitAt);
     return '$name ($copyNumber)$extension';
+  }
+
+  static Future<Map<String, dynamic>?> _readCheckpoint(File file) async {
+    try {
+      final checkpoint =
+          jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      final version = checkpoint['version'];
+      if (version == 2) {
+        final metadataSha256 = checkpoint['metadataSha256'];
+        final metadata = Map<String, dynamic>.from(checkpoint)
+          ..remove('metadataSha256');
+        if (metadataSha256 is! String ||
+            sha256.convert(utf8.encode(jsonEncode(metadata))).toString() !=
+                metadataSha256) {
+          return null;
+        }
+        if (checkpoint['generation'] is! int ||
+            (checkpoint['generation'] as int) <= 0) {
+          return null;
+        }
+      } else if (version == 1) {
+        // Read checkpoints from the previous release; the next saved block
+        // upgrades the journal to the checksummed two-generation format.
+        checkpoint['generation'] = 0;
+      } else {
+        return null;
+      }
+
+      if (checkpoint['sourcePath'] is! String ||
+          checkpoint['sourceBytes'] is! int ||
+          checkpoint['sourceSha256'] is! String ||
+          checkpoint['blockBytes'] is! int ||
+          checkpoint['offset'] is! int ||
+          checkpoint['blockSha256'] is! List ||
+          (checkpoint['blockSha256'] as List).any((hash) =>
+              hash is! String || !RegExp(r'^[0-9a-f]{64}$').hasMatch(hash))) {
+        return null;
+      }
+      return checkpoint;
+    } on FormatException {
+      return null;
+    } on TypeError {
+      return null;
+    }
+  }
+
+  /// Stages and flushes a checksummed snapshot before rotating the previous
+  /// valid generation to a backup. The backup remains available until the next
+  /// checkpoint or successful promotion, so a torn update can resume safely.
+  static Future<void> _writeCheckpoint({
+    required File checkpointFile,
+    required File backupFile,
+    required File stagingFile,
+    required Map<String, Object?> checkpoint,
+  }) async {
+    final metadataSha256 =
+        sha256.convert(utf8.encode(jsonEncode(checkpoint))).toString();
+    await stagingFile.writeAsString(
+      jsonEncode({...checkpoint, 'metadataSha256': metadataSha256}),
+      flush: true,
+    );
+
+    if (await checkpointFile.exists()) {
+      if (await backupFile.exists()) await backupFile.delete();
+      await checkpointFile.rename(backupFile.path);
+    }
+    await stagingFile.rename(checkpointFile.path);
   }
 
   static int _uint32(List<int> bytes, int start) =>

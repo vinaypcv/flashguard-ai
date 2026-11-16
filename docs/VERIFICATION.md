@@ -8,7 +8,11 @@ The `/verify-storage-pr` command is a review procedure in `.claude/commands/veri
 
 ## Checkpoint invariant
 
-A `.checkpoint.json` sidecar records the source path, length, full source SHA-256, complete-block offset, block size, and each completed block's SHA-256. Resume validates the current source digest and both copies of each saved block before reusing bytes. A stale or modified checkpoint is discarded. The final file is promoted only after the completed part and current source match the original source digest. This is a directory-backed prototype; mobile document-provider resume and power-loss durability are not verified.
+A `.checkpoint.json` sidecar records the source path, length, full source SHA-256, complete-block offset, block size, and each completed block's SHA-256. Version 2 snapshots include a metadata checksum and generation number. Each update is staged and flushed before the current snapshot rotates to `.checkpoint.json.bak`; recovery validates metadata and re-hashes every saved source/part block, trying the backup if the newest snapshot is damaged. Version 1 sidecars remain readable and are upgraded on the next checkpoint. The final file is promoted only after the completed part and current source match the original source digest.
+
+`flush: true` and same-directory rename reduce the risk of torn checkpoint metadata. They do not establish power-loss durability on every filesystem because this prototype does not issue platform-specific file and directory sync operations. Mobile document-provider resume is also unverified.
+
+Byte-for-byte copy verification and media structure inspection are reported separately. A malformed or truncated media file can still be preserved as a byte-verified archival copy; the UI now shows both results.
 
 ## Reproduce
 
@@ -31,5 +35,23 @@ No issues found! (ran in 67.6s)
 flutter test --reporter expanded
 00:37 +11: All tests passed!
 ```
+
+## Feature branch result (2026-11-16)
+
+On `feature/verified-storage-v2`, after the checkpoint journal and integrity-state changes:
+
+```text
+flutter test --reporter expanded
+00:10 +14: All tests passed!
+
+flutter analyze --fatal-infos
+No issues found! (ran in 8.9s)
+
+python -m unittest discover -p 'test_*.py' -v
+Ran 3 tests in 0.103s
+OK
+```
+
+The MCP tests ran in the workspace-configured Python 3.14.5 virtual environment. The Flutter SDK is the repository's embedded Windows SDK. No Windows release build or power-loss test was run.
 
 Android and iOS native stubs were not compiled or exercised on mobile hardware in this Windows run. They return `VOLUME_API_NOT_WIRED` until the platform adapters are implemented.
