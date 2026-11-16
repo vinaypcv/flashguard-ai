@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -13,10 +14,13 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory tempDrive;
   late Directory tempVault;
+  late Directory controlDrive;
 
   setUp(() async {
     tempDrive = await Directory.systemTemp.createTemp('flashguard_test_drive_');
     tempVault = await Directory.systemTemp.createTemp('flashguard_test_vault_');
+    controlDrive =
+        await Directory.systemTemp.createTemp('flashguard_control_drive_');
 
     // Valid JPEG + byte-identical duplicate
     final validJpg = Uint8List.fromList([
@@ -73,6 +77,7 @@ void main() {
   tearDown(() async {
     if (await tempDrive.exists()) await tempDrive.delete(recursive: true);
     if (await tempVault.exists()) await tempVault.delete(recursive: true);
+    if (await controlDrive.exists()) await controlDrive.delete(recursive: true);
   });
 
   test(
@@ -389,5 +394,128 @@ void main() {
       ),
       MediaIntegrityStatus.truncatedContainer,
     );
+  });
+
+  test('Recurses into nested directories and isolates a permission failure',
+      () async {
+    final nested = Directory('${tempDrive.path}/nested/camera');
+    await nested.create(recursive: true);
+    await File('${nested.path}/good.bin').writeAsBytes(List.filled(300, 0x5a));
+    await File('${nested.path}/denied.bin')
+        .writeAsBytes(List.filled(300, 0x6b));
+
+    final job = await IsolateOffloadWorker.startVerifiedBatch(
+      sourceDirPath: tempDrive.path,
+      destDirPath: tempVault.path,
+      faultInjection: const BatchFaultInjection(
+        failBeforeTransfer: {'nested/camera/denied.bin'},
+      ),
+    );
+    final summary = await job.done;
+
+    expect(summary.totalFiles, 7);
+    expect(
+        summary.results.any((r) => r.relativePath == 'nested/camera/good.bin'),
+        isTrue);
+    expect(summary.failures.map((failure) => failure.relativePath),
+        contains('nested/camera/denied.bin'));
+    expect(
+        File('${tempVault.path}/nested/camera/good.bin').existsSync(), isTrue);
+    expect(
+      File('${tempVault.path}/nested/camera/denied.bin').existsSync(),
+      isFalse,
+    );
+  });
+
+  test('Rejects a recursive destination inside the source tree', () async {
+    final job = await IsolateOffloadWorker.startVerifiedBatch(
+      sourceDirPath: tempDrive.path,
+      destDirPath: '${tempDrive.path}/vault',
+    );
+    await expectLater(job.done, throwsA(isA<StateError>()));
+    expect(await Directory('${tempDrive.path}/vault').exists(), isFalse);
+  });
+
+  test('Resumes a batch file after a deterministic interruption and bit flip',
+      () async {
+    final nested = Directory('${tempDrive.path}/nested');
+    await nested.create();
+    final source = File('${nested.path}/interrupted.bin');
+    await source.writeAsBytes(List<int>.generate(1024, (i) => i & 0xff));
+
+    final interrupted = await IsolateOffloadWorker.startVerifiedBatch(
+      sourceDirPath: tempDrive.path,
+      destDirPath: tempVault.path,
+      checkpointBlockBytes: 128,
+      faultInjection: const BatchFaultInjection(
+        failAfterBytes: {'nested/interrupted.bin': 128},
+      ),
+    );
+    final firstSummary = await interrupted.done;
+    expect(firstSummary.failures.map((failure) => failure.relativePath),
+        contains('nested/interrupted.bin'));
+
+    final part = File('${tempVault.path}/nested/interrupted.bin.part');
+    expect(await part.exists(), isTrue);
+    final partialBytes = await part.readAsBytes();
+    partialBytes[10] ^= 1;
+    await part.writeAsBytes(partialBytes);
+
+    final resumed = await IsolateOffloadWorker.startVerifiedBatch(
+      sourceDirPath: tempDrive.path,
+      destDirPath: tempVault.path,
+      checkpointBlockBytes: 128,
+    );
+    final recovered = await resumed.done;
+    final result = recovered.results
+        .singleWhere((audit) => audit.relativePath == 'nested/interrupted.bin');
+    expect(result.resumedBytes, 0);
+    expect(await File('${tempVault.path}/nested/interrupted.bin').readAsBytes(),
+        await source.readAsBytes());
+    expect(await part.exists(), isFalse);
+  });
+
+  test('Streams progress and cancels at a checkpoint that resumes safely',
+      () async {
+    final source = File('${controlDrive.path}/large.bin');
+    await source.writeAsBytes(List<int>.generate(1024 * 1024, (i) => i & 0xff));
+    final destination = Directory('${tempVault.path}/controlled');
+    final job = await IsolateOffloadWorker.startVerifiedBatch(
+      sourceDirPath: controlDrive.path,
+      destDirPath: destination.path,
+      checkpointBlockBytes: 64 * 1024,
+      faultInjection: const BatchFaultInjection(chunkDelayMs: 2),
+    );
+
+    var pauseRequested = false;
+    final paused = Completer<void>();
+    final subscription = job.progress.listen((event) {
+      if (event.state == BatchProgressState.transferring && !pauseRequested) {
+        pauseRequested = true;
+        job.pause();
+      }
+      if (event.state == BatchProgressState.paused && !paused.isCompleted) {
+        paused.complete();
+      }
+    });
+    await paused.future.timeout(const Duration(seconds: 10));
+    job.cancel();
+    final canceled = await job.done;
+    await subscription.cancel();
+
+    expect(canceled.cancelled, isTrue);
+    expect(await File('${destination.path}/large.bin.part').exists(), isTrue);
+    expect(await File('${destination.path}/large.bin').exists(), isFalse);
+
+    final restarted = await IsolateOffloadWorker.startVerifiedBatch(
+      sourceDirPath: controlDrive.path,
+      destDirPath: destination.path,
+      checkpointBlockBytes: 64 * 1024,
+    );
+    final recovered = await restarted.done;
+    final result = recovered.results.single;
+    expect(result.resumedBytes, greaterThan(0));
+    expect(await File('${destination.path}/large.bin').readAsBytes(),
+        await source.readAsBytes());
   });
 }

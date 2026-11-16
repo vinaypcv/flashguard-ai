@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 
@@ -21,11 +22,19 @@ class _FlashGuardDashboardState extends State<FlashGuardDashboard> {
   bool _isScanning = false;
   BatchOffloadSummary? _summary;
   String? _errorMessage;
+  BatchOffloadJob? _activeJob;
+  BatchProgressEvent? _currentProgress;
+  StreamSubscription<BatchProgressEvent>? _progressSubscription;
+  bool _isPaused = false;
+  bool _isCancelling = false;
 
   Future<void> _executeVerifiedOffload() async {
     setState(() {
       _isScanning = true;
       _errorMessage = null;
+      _currentProgress = null;
+      _isPaused = false;
+      _isCancelling = false;
     });
 
     try {
@@ -34,27 +43,59 @@ class _FlashGuardDashboardState extends State<FlashGuardDashboard> {
       // streams are implemented. Directory access remains a demo capability.
       final volume = await const SimulatedVolumeProvider()
           .getVolumeStats(_sourceController.text.trim());
-      final result = await IsolateOffloadWorker.runVerifiedBatch(
+      final job = await IsolateOffloadWorker.startVerifiedBatch(
         sourceDirPath: _sourceController.text.trim(),
         destDirPath: destPath,
         freeSpaceRatio: volume.freeSpaceRatio,
       );
+      _activeJob = job;
+      _progressSubscription = job.progress.listen((event) {
+        if (!mounted) return;
+        setState(() {
+          _currentProgress = event;
+          if (event.state == BatchProgressState.paused) _isPaused = true;
+          if (event.state == BatchProgressState.resumed) _isPaused = false;
+        });
+      });
+      final result = await job.done;
       if (!mounted) return;
       setState(() {
         _summary = result;
         _isScanning = false;
+        _isPaused = false;
+        _activeJob = null;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _errorMessage = 'Storage I/O Fault: $e';
         _isScanning = false;
+        _activeJob = null;
       });
     }
   }
 
+  void _togglePause() {
+    final job = _activeJob;
+    if (job == null) return;
+    if (_isPaused) {
+      job.resume();
+      setState(() => _isPaused = false);
+    } else {
+      job.pause();
+      setState(() => _isPaused = true);
+    }
+  }
+
+  void _cancelBatch() {
+    _activeJob?.cancel();
+    setState(() => _isCancelling = true);
+  }
+
   @override
   void dispose() {
+    _activeJob?.cancel();
+    _progressSubscription?.cancel();
     _sourceController.dispose();
     super.dispose();
   }
@@ -86,12 +127,53 @@ class _FlashGuardDashboardState extends State<FlashGuardDashboard> {
                   const SizedBox(height: 12),
                   TextField(
                     controller: _sourceController,
+                    enabled: !_isScanning,
                     decoration: const InputDecoration(
                       labelText: 'Drive / SD Card Mount Path',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.sd_storage_outlined),
                     ),
                   ),
+                  if (_isScanning) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _isCancelling ? null : _togglePause,
+                            icon: Icon(
+                                _isPaused ? Icons.play_arrow : Icons.pause),
+                            label: Text(_isPaused ? 'Resume' : 'Pause'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _isCancelling ? null : _cancelBatch,
+                            icon: const Icon(Icons.cancel_outlined),
+                            label:
+                                Text(_isCancelling ? 'Canceling…' : 'Cancel'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (_currentProgress != null) ...[
+                      const SizedBox(height: 12),
+                      LinearProgressIndicator(
+                        value: _currentProgress!.fraction.clamp(0, 1),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '${_isPaused ? 'Paused · ' : ''}'
+                        'File ${_currentProgress!.fileIndex} of ${_currentProgress!.totalFiles}: '
+                        '${_currentProgress!.relativePath} · '
+                        '${_currentProgress!.bytesCopied} / ${_currentProgress!.totalBytes} bytes',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                  ],
                   const SizedBox(height: 16),
                   SizedBox(
                     width: double.infinity,
@@ -190,6 +272,28 @@ class _FlashGuardDashboardState extends State<FlashGuardDashboard> {
             ),
             const SizedBox(height: 8),
 
+            if (_summary!.cancelled)
+              const Card(
+                child: ListTile(
+                  leading: Icon(Icons.pause_circle_outline),
+                  title: Text('Batch canceled safely'),
+                  subtitle: Text(
+                      'Completed files are retained; the active file can resume from its checkpoint.'),
+                ),
+              ),
+
+            ..._summary!.failures.map((failure) => Card(
+                  color: theme.colorScheme.errorContainer,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    leading: Icon(Icons.error_outline,
+                        color: theme.colorScheme.onErrorContainer),
+                    title: Text(failure.relativePath),
+                    subtitle: Text(
+                        'Transfer failed; other files continued. ${failure.message}'),
+                  ),
+                )),
+
             ..._summary!.results.map((file) {
               final mediaIsValid = file.isMediaStructurallyValid;
               return Card(
@@ -201,7 +305,7 @@ class _FlashGuardDashboardState extends State<FlashGuardDashboard> {
                         : Icons.warning_amber_rounded,
                     color: mediaIsValid ? Colors.green : Colors.orange,
                   ),
-                  title: Text(file.fileName),
+                  title: Text(file.relativePath),
                   subtitle: Text(
                     'Byte copy: ${file.byteForByteVerified ? 'VERIFIED' : 'UNVERIFIED'}\n'
                     'Media structure: ${file.mediaIntegrityLabel}\n'

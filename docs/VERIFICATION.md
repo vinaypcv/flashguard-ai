@@ -54,4 +54,24 @@ OK
 
 The MCP tests ran in the workspace-configured Python 3.14.5 virtual environment. The Flutter SDK is the repository's embedded Windows SDK. No Windows release build or power-loss test was run.
 
+## Batch processing result (2026-11-16)
+
+The batch worker now enumerates files recursively without following links and writes each file beneath the destination using its source-relative directory. Per-file failures are recorded in the summary while later files continue. `startVerifiedBatch` exposes progress events and pause, resume, and cancel controls; commands take effect at block checkpoints, preserving the active `.part` file and its validated checkpoint for a later run. `runVerifiedBatch` remains available for callers that only need the completed summary.
+
+The deterministic Flutter cases cover nested destination paths, rejection of a destination inside its source tree, a simulated permission denial that does not stop neighboring transfers, an injected interruption followed by a checkpoint-block bit flip and safe restart, and progress/pause/cancel/restart behavior.
+
+```text
+flutter test --reporter expanded
+00:36 +18: All tests passed!
+
+flutter analyze --fatal-infos
+No issues found! (ran in 50.0s)
+
+python -m unittest discover -p test_*.py -v
+Ran 3 tests in 0.060s
+OK
+```
+
+The permission scenario is deterministic fault injection, not an operating-system ACL test. Pause and cancel are honored at transfer checkpoints; the initial whole-source SHA-256 pass is not interruptible. These tests do not establish physical-device disconnect behavior, power-loss durability, or performance under large production media workloads.
+
 Android and iOS native stubs were not compiled or exercised on mobile hardware in this Windows run. They return `VOLUME_API_NOT_WIRED` until the platform adapters are implemented.

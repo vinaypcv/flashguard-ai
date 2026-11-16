@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -12,6 +13,10 @@ enum MediaIntegrityStatus {
 
 class FileAuditResult {
   final String fileName;
+
+  /// Path relative to the selected source directory for batch transfers.
+  /// Direct single-file transfers default this to [fileName].
+  final String relativePath;
   final String destinationFileName;
   final int byteSize;
   final String sha256Hash;
@@ -35,10 +40,25 @@ class FileAuditResult {
     required this.mediaStatus,
     required this.byteForByteVerified,
     required this.transferMbps,
+    String? relativePath,
     this.resumedBytes = 0,
     this.transferredBytes = 0,
     this.reusedExistingCopy = false,
-  });
+  }) : relativePath = relativePath ?? fileName;
+
+  FileAuditResult withRelativePath(String path) => FileAuditResult(
+        fileName: fileName,
+        destinationFileName: destinationFileName,
+        byteSize: byteSize,
+        sha256Hash: sha256Hash,
+        mediaStatus: mediaStatus,
+        byteForByteVerified: byteForByteVerified,
+        transferMbps: transferMbps,
+        relativePath: path,
+        resumedBytes: resumedBytes,
+        transferredBytes: transferredBytes,
+        reusedExistingCopy: reusedExistingCopy,
+      );
 
   /// Compatibility alias for callers that previously read the media status.
   @Deprecated('Use mediaStatus to describe structure or byteForByteVerified')
@@ -139,7 +159,7 @@ class IntegrityEngine {
   static Future<FileAuditResult> verifiedOffload({
     required File source,
     required Directory destinationDir,
-    void Function(double progress)? onProgress,
+    FutureOr<void> Function(double progress)? onProgress,
     String? expectedSha256,
     int checkpointBlockBytes = 4 * 1024 * 1024,
   }) async {
@@ -342,7 +362,7 @@ class IntegrityEngine {
               'offset': copiedBytes,
               'blockSha256': List<String>.from(blockHashes),
             });
-          if (totalBytes > 0) onProgress?.call(copiedBytes / totalBytes);
+          if (totalBytes > 0) await onProgress?.call(copiedBytes / totalBytes);
         }
       } finally {
         await input.close();
