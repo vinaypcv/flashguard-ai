@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 
+import 'atomic_file_promoter.dart';
 import 'transfer_state_machine.dart';
 
 enum MediaIntegrityStatus {
@@ -33,6 +34,7 @@ class FileAuditResult {
   final int resumedBytes;
   final int transferredBytes;
   final bool reusedExistingCopy;
+  final StorageCommitEvidence? storageCommitEvidence;
 
   const FileAuditResult({
     required this.fileName,
@@ -46,6 +48,7 @@ class FileAuditResult {
     this.resumedBytes = 0,
     this.transferredBytes = 0,
     this.reusedExistingCopy = false,
+    this.storageCommitEvidence,
   }) : relativePath = relativePath ?? fileName;
 
   FileAuditResult withRelativePath(String path) => FileAuditResult(
@@ -60,6 +63,7 @@ class FileAuditResult {
         resumedBytes: resumedBytes,
         transferredBytes: transferredBytes,
         reusedExistingCopy: reusedExistingCopy,
+        storageCommitEvidence: storageCommitEvidence,
       );
 
   /// Compatibility alias for callers that previously read the media status.
@@ -163,7 +167,9 @@ class IntegrityEngine {
     required Directory destinationDir,
     Directory? destinationRoot,
     TransferStateMachine? lifecycle,
+    AtomicFilePromoter promoter = const NativeAtomicFilePromoter(),
     FutureOr<void> Function()? beforePromotion,
+    FutureOr<void> Function()? afterPromotion,
     FutureOr<void> Function(double progress)? onProgress,
     String? expectedSha256,
     int checkpointBlockBytes = 4 * 1024 * 1024,
@@ -180,6 +186,7 @@ class IntegrityEngine {
     late final File checkpointBackupFile;
     late final File checkpointStagingFile;
     RandomAccessFile? output;
+    TransferWorkspaceLease? workspaceLease;
     var discardPartial = false;
     var pathsReady = false;
     try {
@@ -234,6 +241,13 @@ class IntegrityEngine {
         finalFile = candidate;
         break;
       }
+
+      final capabilities = await promoter.capabilities(destinationDir);
+      if (!capabilities.atomicNoReplace) {
+        throw PromotionException(PromotionFailure.unsupported,
+            capabilities.description, finalFile.path);
+      }
+      workspaceLease = await promoter.acquireWorkspace(finalFile);
 
       tempFile = File('${finalFile.path}.part');
       checkpointFile = File('${finalFile.path}.checkpoint.json');
@@ -431,24 +445,47 @@ class IntegrityEngine {
       if (status == MediaIntegrityStatus.ioError) {
         throw FileSystemException('Media inspection failed', tempFile.path);
       }
+      // Complete the data and journal sync requests before the namespace move.
+      // Windows reports the missing directory-sync capability explicitly.
+      if (capabilities.nativeFileSync) {
+        await promoter.syncFile(tempFile);
+        for (final checkpoint in [checkpointFile, checkpointBackupFile]) {
+          if (await checkpoint.exists()) await promoter.syncFile(checkpoint);
+        }
+      }
+      if (capabilities.directorySync) {
+        await promoter.syncDirectory(destinationDir);
+      }
       state.transition(TransferState.promoting);
       await beforePromotion?.call();
-      // Dart's rename may replace an existing file on some platforms. This
-      // check prevents ordinary conflicts; cross-process no-clobber atomicity
-      // still requires a platform-specific primitive.
-      if (await finalFile.exists()) {
-        throw FileSystemException(
-            'Destination appeared before promotion', finalFile.path);
-      }
-      await tempFile.rename(finalFile.path);
-      if (!await finalFile.exists() ||
-          await finalFile.length() != totalBytes ||
-          (await sha256.bind(finalFile.openRead()).single).toString() !=
-              sourceDigest ||
-          (await sha256.bind(source.openRead()).single).toString() !=
-              sourceDigest) {
-        throw FileSystemException(
-            'Promoted file failed final verification', finalFile.path);
+      await promoter.promoteNoReplace(tempFile, finalFile);
+      try {
+        await afterPromotion?.call();
+        if (capabilities.directorySync) {
+          await promoter.syncDirectory(destinationDir);
+        }
+        if (await FileSystemEntity.type(finalFile.path, followLinks: false) !=
+                FileSystemEntityType.file ||
+            await finalFile.length() != totalBytes ||
+            (await sha256.bind(finalFile.openRead()).single).toString() !=
+                sourceDigest ||
+            await source.length() != totalBytes ||
+            (await sha256.bind(source.openRead()).single).toString() !=
+                sourceDigest) {
+          throw PromotionException(
+              PromotionFailure.verification,
+              'Promoted file failed final verification; retained for recovery',
+              finalFile.path,
+              destinationMayExist: true);
+        }
+      } catch (error) {
+        // Never rename/delete this path: another writer could now own it.
+        if (error is PromotionException && error.destinationMayExist) rethrow;
+        throw PromotionException(
+            error is PromotionException ? error.kind : PromotionFailure.io,
+            'Post-promotion failure; retained for recovery: $error',
+            finalFile.path,
+            destinationMayExist: true);
       }
       state.transition(TransferState.committed);
       for (final file in [
@@ -476,6 +513,9 @@ class IntegrityEngine {
             seconds > 0 ? (totalBytes - resumedBytes) / 1048576 / seconds : 0,
         resumedBytes: resumedBytes,
         transferredBytes: totalBytes - resumedBytes,
+        storageCommitEvidence: StorageCommitEvidence(capabilities,
+            fileSyncCompleted: capabilities.nativeFileSync,
+            directorySyncCompleted: capabilities.directorySync),
       );
     } catch (error) {
       if (state.state != TransferState.committed &&
@@ -505,6 +545,8 @@ class IntegrityEngine {
         }
       }
       rethrow;
+    } finally {
+      await workspaceLease?.release();
     }
   }
 

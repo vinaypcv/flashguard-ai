@@ -161,3 +161,157 @@ pre-edit baseline run overlapped an edit during compilation, so it cannot be
 counted as a clean baseline result. The final suite includes all 22 previously
 existing tests, and all passed. No mobile hardware or physical power-loss test
 was performed.
+
+## Milestone 3, Increment 3: native promotion (2026-11-16)
+
+This section supersedes Increment 2's pre-rename conflict-check limitation.
+The baseline was recorded before edits at `bb9a276`: all 26 Flutter tests
+passed in 2:55, including all 100 seeds `0x5a1700` through `0x5a1763`.
+
+### Native operations and supported scope
+
+`AtomicFilePromoter` provides injectable capabilities, workspace ownership,
+file and directory sync, and no-replace promotion. Native disk operations run
+inside `Isolate.run`, including when called directly from the UI isolate.
+`PromotionException` distinguishes conflict, unsupported capability, invalid
+paths, I/O failure, and failed verification. It remains a
+`FileSystemException` for existing callers.
+
+| Platform | Promotion | Native sync requests | Support boundary |
+| --- | --- | --- | --- |
+| Windows | `MoveFileExW` with flags **0** | `FlushFileBuffers` on part and journal files | Local fixed/removable NTFS only; directory sync unavailable |
+| Linux | glibc `renameat2` with `RENAME_NOREPLACE` | `fsync` on part/journal files and their containing directory | Requires libc symbol, kernel, and filesystem support; runtime rejection fails closed |
+| Others | Typed unsupported result | Unavailable | No overwrite-capable rename fallback |
+
+The Windows flags omit both `MOVEFILE_REPLACE_EXISTING` and
+`MOVEFILE_COPY_ALLOWED`. The promoter requires the same resolved parent
+directory for both paths and a regular, non-symlink part. The kernel operation
+is responsible for refusing an occupied destination; no existence precheck is
+used to authorize a potentially replacing rename. A failed Windows move also
+checks destination occupancy to classify conflicts: Dart FFI's thread-local
+`GetLastError` was observed returning zero on some failed calls. Other failures
+remain typed I/O errors when no reliable native diagnostic is available.
+
+Linux `EEXIST` is a conflict; `EXDEV`, `EINVAL`, `ENOSYS`, and `EOPNOTSUPP`
+are unsupported results. Symbol availability is a preliminary capability,
+not proof that a specific mounted filesystem implements the operation. No
+ordinary rename is substituted after a failure.
+
+Engine jobs also acquire an OS lock on a persistent `.transfer.lock` sidecar
+before opening shared part/journal files. Windows uses an exclusive-sharing
+`CreateFileW` handle; Linux uses nonblocking exclusive `flock`. Busy or
+inaccessible workspaces fail explicitly. The lock file stays in place to
+prevent different writers locking different inodes; normal completion,
+cancellation, and exceptions release the handle. Process termination releases
+the OS lock. Forcibly killing only a Dart isolate while it owns a native handle
+can leave the lease held until the host process exits; abrupt isolate kill is
+not a supported cancellation mechanism.
+
+### Commit order and recovery
+
+1. Copy and flush part blocks; stage, flush, and rotate the existing v2 journal.
+   Resume still validates metadata, bounds, source identity, and every saved
+   source/part block. The checkpoint schema and v1 compatibility are preserved.
+2. Close the part, compare its SHA-256 and the current source against the
+   original source digest, and inspect media structure.
+3. Request native synchronization of the part and available primary/backup
+   journals. Sync the containing directory when supported. A sync failure
+   prevents promotion.
+4. Enter `promoting`, then issue the native no-replace operation. A conflict
+   retains the competing destination and the recovery files; a later attempt
+   follows the existing reverify-or-numbered-name policy.
+5. Sync the parent after the move when supported, then reverify final type,
+   size, digest, and current source size/digest. Only then enter `committed`.
+6. Remove checkpoint sidecars as best-effort cleanup. Retain the lock inode.
+   Cleanup failure cannot mask the already verified commit.
+
+After a completed move, any sync or verification failure carries
+`destinationMayExist: true` and the retained final path. The file is logically
+unverified: no successful audit is returned. The engine never deletes or
+renames that path on failure because another writer could have replaced it.
+Retry rehashes it: matching bytes can be reused; different bytes are preserved
+and a numbered destination is selected. This also covers a move that completed
+before its caller observed completion. Checkpoint presence never establishes
+that a final file is verified. The source is never deleted.
+
+`FileAuditResult.storageCommitEvidence` records which native sync requests
+completed. Reusing an existing copy makes no new sync claim and leaves that
+field null. `committed` still denotes a byte-verified application result,
+not a power-loss durability guarantee.
+
+### Evidence and limitations
+
+Native tests ran on Windows build `10.0.26300.0`, x64, with Dart 3.13.7 and
+the embedded Flutter SDK. The native capability check confirmed local NTFS in
+the temporary test directory. Four native tests cover Unicode paths,
+`FlushFileBuffers`, existing destination preservation, same-directory
+enforcement, workspace exclusion/reacquisition, and eight rounds of two
+independent isolate writers released through a synchronization barrier. Each
+round requires exactly one success and one conflict, matching final bytes,
+an intact losing part, and removal of only the winning part.
+
+The engine/fault tests cover unsupported capabilities, failure after part
+verification, damaged journals on retry, pre-promotion and post-promotion sync
+failures, a late competing writer, retry naming, incomplete promotion,
+post-promotion replacement, shared-workspace exclusion, and sync evidence.
+These tests use callbacks/completers rather than timing sleeps. A native
+move followed by injected failure demonstrates restart revalidation; it does
+not simulate a real process power cut.
+
+Linux execution was not available in this Windows session. The CI workflow
+now runs the native and regression suites on both Windows and Linux, but no
+remote CI result is claimed. Windows network shares, ReFS, FAT/exFAT, other
+platforms, missing Linux native symbols, and unsupported Linux kernel/filesystem
+operations fail closed. No physical tests were performed on external media.
+
+Power-loss durability remains unproven. Windows has no implemented parent
+directory synchronization; Linux sync completion is subject to actual
+filesystem/device behavior. Newly created ancestor directories and checkpoint
+cleanup are not individually synced. Namespace and file contents must remain
+stable during verification: atomic no-replace protects competing creators,
+not an adversary modifying a winning file or replacing parent directories,
+symlinks, reparse points, or hard links. Native lock ownership protects
+cooperating FlashGuard jobs, not arbitrary external part-file mutations.
+
+Authoritative API references:
+
+- [Microsoft MoveFileExW flags and cross-volume behavior](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw)
+- [Microsoft FlushFileBuffers semantics](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-flushfilebuffers)
+- [Linux renameat2 flags and filesystem support](https://man7.org/linux/man-pages/man2/rename.2.html)
+- [Linux fsync and parent-directory synchronization](https://man7.org/linux/man-pages/man2/fsync.2.html)
+
+### Final verification
+
+```text
+# Dependency resolution used the already cached ffi 2.2.0 package.
+flutter pub get --offline
+Got dependencies!
+
+dart format lib test
+Formatted 14 files.
+
+flutter test --no-pub --concurrency=1 --timeout 2m --reporter expanded
+03:16 +39: All tests passed!
+
+flutter analyze --no-pub --fatal-infos
+No issues found! (ran in 8.0s)
+
+# From mcp-server, using .venv/Scripts/python.exe:
+python -m unittest discover -p "test_*.py" -v
+Ran 3 tests in 0.249s
+OK
+
+git diff --check
+Exit code 0; only Git line-ending conversion warnings.
+```
+
+The exact requested Flutter test command was attempted, but online dependency
+resolution stalled. After successful offline resolution, `--no-pub` was used
+for the full test and analysis runs; no tests were excluded. All 26 prior tests
+and all 100 original generated seeds passed, along with 13 added tests. The
+four native Windows tests were executed, not skipped. Eight synchronized
+writer races passed in that native suite. No remote CI run, independent
+process-writer stress test, or physical crash-durability test is claimed.
+
+Changes remain uncommitted on `feature/verified-storage-v2`. The preexisting
+untracked `.vscode/` directory was not modified.
