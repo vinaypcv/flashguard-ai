@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 
 import 'atomic_file_promoter.dart';
+import 'transfer_diagnostics.dart';
 import 'transfer_state_machine.dart';
 
 enum MediaIntegrityStatus {
@@ -168,6 +169,8 @@ class IntegrityEngine {
     Directory? destinationRoot,
     TransferStateMachine? lifecycle,
     AtomicFilePromoter promoter = const NativeAtomicFilePromoter(),
+    TransferDiagnostics? diagnostics,
+    FutureOr<void> Function(TransferProbe probe)? onProbe,
     FutureOr<void> Function()? beforePromotion,
     FutureOr<void> Function()? afterPromotion,
     FutureOr<void> Function(double progress)? onProgress,
@@ -178,6 +181,7 @@ class IntegrityEngine {
       throw ArgumentError.value(checkpointBlockBytes, 'checkpointBlockBytes');
     }
     final timer = Stopwatch()..start();
+    final metrics = diagnostics ?? TransferDiagnostics();
     final state = lifecycle ?? TransferStateMachine();
     final fileName = source.uri.pathSegments.last;
     late final File finalFile;
@@ -199,8 +203,10 @@ class IntegrityEngine {
           destinationRoot ?? destinationDir, destinationDir);
       state.transition(TransferState.hashingSource);
       final totalBytes = await source.length();
+      final sourceHashTimer = Stopwatch()..start();
       final sourceDigest =
           (await sha256.bind(source.openRead()).single).toString();
+      metrics.sourceHashMicros = sourceHashTimer.elapsedMicroseconds;
       if (expectedSha256 != null &&
           sourceDigest != expectedSha256.toLowerCase()) {
         throw FileSystemException(
@@ -269,6 +275,7 @@ class IntegrityEngine {
       }
 
       var resumedBytes = 0;
+      final recoveryTimer = Stopwatch()..start();
       var blockHashes = <String>[];
       final checkpointFiles = [checkpointFile, checkpointBackupFile];
       final checkpointCandidates = <Map<String, dynamic>>[];
@@ -361,10 +368,12 @@ class IntegrityEngine {
       }
 
       output = await tempFile.open(mode: FileMode.append);
+      metrics.recoveryValidationMicros = recoveryTimer.elapsedMicroseconds;
       state.transition(TransferState.copying);
       await output.truncate(resumedBytes);
       await output.setPosition(resumedBytes);
       final input = await source.open();
+      final copyTimer = Stopwatch()..start();
       var copiedBytes = resumedBytes;
       try {
         await input.setPosition(resumedBytes);
@@ -378,6 +387,9 @@ class IntegrityEngine {
           }
           await output.writeFrom(chunk);
           await output.flush();
+          metrics.copyBytesWritten += chunk.length;
+          await onProbe?.call(TransferProbe(
+              TransferProbeStage.blockFlushed, copiedBytes + chunk.length));
           blockHashes.add(sha256.convert(chunk).toString());
           copiedBytes += chunk.length;
           final previousGeneration = checkpointCandidates.isEmpty
@@ -385,7 +397,7 @@ class IntegrityEngine {
               : checkpointCandidates
                   .map((checkpoint) => checkpoint['generation'] as int)
                   .reduce((a, b) => a > b ? a : b);
-          await _writeCheckpoint(
+          metrics.checkpointMetadataBytesWritten += await _writeCheckpoint(
             checkpointFile: checkpointFile,
             backupFile: checkpointBackupFile,
             stagingFile: checkpointStagingFile,
@@ -413,6 +425,8 @@ class IntegrityEngine {
               'blockSha256': List<String>.from(blockHashes),
             });
           state.transition(TransferState.checkpointed);
+          await onProbe?.call(
+              TransferProbe(TransferProbeStage.checkpointSaved, copiedBytes));
           if (totalBytes > 0) await onProgress?.call(copiedBytes / totalBytes);
           if (copiedBytes < totalBytes &&
               state.state == TransferState.checkpointed) {
@@ -425,10 +439,15 @@ class IntegrityEngine {
       await output.flush();
       await output.close();
       output = null;
+      metrics.copyCheckpointMicros = copyTimer.elapsedMicroseconds;
       state.transition(TransferState.verifying);
+      await onProbe?.call(
+          TransferProbe(TransferProbeStage.verificationStarted, copiedBytes));
+      final verificationTimer = Stopwatch()..start();
 
       final destinationDigest =
-          (await sha256.bind(tempFile.openRead()).single).toString();
+          (await sha256.bind(_verificationStream(tempFile, onProbe)).single)
+              .toString();
       final currentSourceDigest =
           (await sha256.bind(source.openRead()).single).toString();
       if (copiedBytes != totalBytes ||
@@ -445,6 +464,9 @@ class IntegrityEngine {
       if (status == MediaIntegrityStatus.ioError) {
         throw FileSystemException('Media inspection failed', tempFile.path);
       }
+      metrics.verificationMicros = verificationTimer.elapsedMicroseconds;
+      await onProbe
+          ?.call(TransferProbe(TransferProbeStage.bytesVerified, copiedBytes));
       // Complete the data and journal sync requests before the namespace move.
       // Windows reports the missing directory-sync capability explicitly.
       if (capabilities.nativeFileSync) {
@@ -457,13 +479,18 @@ class IntegrityEngine {
         await promoter.syncDirectory(destinationDir);
       }
       state.transition(TransferState.promoting);
+      await onProbe?.call(
+          TransferProbe(TransferProbeStage.promotionStarted, copiedBytes));
       await beforePromotion?.call();
       await promoter.promoteNoReplace(tempFile, finalFile);
       try {
+        await onProbe
+            ?.call(TransferProbe(TransferProbeStage.promoted, copiedBytes));
         await afterPromotion?.call();
         if (capabilities.directorySync) {
           await promoter.syncDirectory(destinationDir);
         }
+        final finalVerificationTimer = Stopwatch()..start();
         if (await FileSystemEntity.type(finalFile.path, followLinks: false) !=
                 FileSystemEntityType.file ||
             await finalFile.length() != totalBytes ||
@@ -478,6 +505,10 @@ class IntegrityEngine {
               finalFile.path,
               destinationMayExist: true);
         }
+        metrics.finalVerificationMicros =
+            finalVerificationTimer.elapsedMicroseconds;
+        await onProbe?.call(
+            TransferProbe(TransferProbeStage.finalVerified, copiedBytes));
       } catch (error) {
         // Never rename/delete this path: another writer could now own it.
         if (error is PromotionException && error.destinationMayExist) rethrow;
@@ -589,6 +620,17 @@ class IntegrityEngine {
     );
   }
 
+  static Stream<List<int>> _verificationStream(
+      File file, FutureOr<void> Function(TransferProbe)? onProbe) async* {
+    var read = 0;
+    await for (final chunk in file.openRead()) {
+      read += chunk.length;
+      await onProbe
+          ?.call(TransferProbe(TransferProbeStage.verificationBlockRead, read));
+      yield chunk;
+    }
+  }
+
   static String _fileNameWithCopyNumber(String fileName, int copyNumber) {
     final extensionStart = fileName.lastIndexOf('.');
     final splitAt = extensionStart > 0 ? extensionStart : fileName.length;
@@ -679,7 +721,7 @@ class IntegrityEngine {
   /// Stages and flushes a checksummed snapshot before rotating the previous
   /// valid generation to a backup. The backup remains available until the next
   /// checkpoint or successful promotion, so a torn update can resume safely.
-  static Future<void> _writeCheckpoint({
+  static Future<int> _writeCheckpoint({
     required File checkpointFile,
     required File backupFile,
     required File stagingFile,
@@ -687,8 +729,10 @@ class IntegrityEngine {
   }) async {
     final metadataSha256 =
         sha256.convert(utf8.encode(jsonEncode(checkpoint))).toString();
+    final encoded =
+        jsonEncode({...checkpoint, 'metadataSha256': metadataSha256});
     await stagingFile.writeAsString(
-      jsonEncode({...checkpoint, 'metadataSha256': metadataSha256}),
+      encoded,
       flush: true,
     );
 
@@ -697,6 +741,7 @@ class IntegrityEngine {
       await checkpointFile.rename(backupFile.path);
     }
     await stagingFile.rename(checkpointFile.path);
+    return utf8.encode(encoded).length;
   }
 
   static int _uint32(List<int> bytes, int start) =>

@@ -52,3 +52,52 @@ jobs:
       - name: Run Flutter tests
         run: flutter test --concurrency=1 --timeout 2m --reporter expanded
         working-directory: ./app
+
+  verify-real-filesystem:
+    name: Native process recovery (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.9'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+        working-directory: app
+      - name: Exercise native promotion
+        run: flutter test --no-pub test/atomic_file_promoter_native_test.dart --reporter expanded
+        working-directory: app
+      - name: Kill and restart independent production workers
+        run: dart --packages=app/.dart_tool/package_config.json benchmarks/storage_reliability/run.dart --suite=reliability --rounds=5 --output=benchmarks/storage_reliability/results/ci-${{ runner.os }}-reliability.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: filesystem-evidence-${{ runner.os }}
+          path: benchmarks/storage_reliability/results/ci-*.json
+
+  verify-performance-smoke:
+    name: Bounded performance smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.9'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+        working-directory: app
+      - name: Warm up and measure a 1 MiB fixture twice
+        run: dart --packages=app/.dart_tool/package_config.json benchmarks/storage_reliability/run.dart --suite=smoke --output=benchmarks/storage_reliability/results/ci-smoke.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: performance-smoke-evidence
+          path: benchmarks/storage_reliability/results/ci-smoke.json

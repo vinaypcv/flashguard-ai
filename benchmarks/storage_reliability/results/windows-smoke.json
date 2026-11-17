@@ -1,0 +1,272 @@
+{
+  "schemaVersion": 1,
+  "startedUtc": "2026-11-17T06:04:23.622868Z",
+  "completedUtc": "2026-11-17T06:05:09.346774Z",
+  "options": {
+    "suite": "smoke",
+    "seed": 5904128,
+    "samples": 3,
+    "rounds": 5,
+    "sizesMiB": [
+      1,
+      16,
+      128
+    ],
+    "diskFullOptIn": false,
+    "maxAllocationBytes": 268435456
+  },
+  "environment": {
+    "os": "windows",
+    "osVersion": "\"Windows 10 Home\" 10.0 (Build 26300)",
+    "dart": "3.13.7 (stable) (Thu Oct 22 14:28:57 2026 -0700) on \"windows_x64\"",
+    "executable": "<WORKSPACE>\\.tools\\flutter\\bin\\cache\\dart-sdk\\bin\\dart.exe",
+    "processors": 8,
+    "volume": {
+      "mount": "C:\\",
+      "source": "114084607",
+      "fileSystem": "NTFS",
+      "label": "Windows",
+      "totalBytes": 998865104896,
+      "freeBytes": 677330853888
+    },
+    "nativeCapabilities": {
+      "atomicNoReplace": true,
+      "nativeFileSync": true,
+      "directorySync": false,
+      "description": "Windows NTFS driveType=3; local NTFS only; FlushFileBuffers available, directory sync unavailable"
+    },
+    "gitHead": "9d6495eb0435e46214b754c265858081d823b28f",
+    "gitDirty": true,
+    "sourceSha256": {
+      "app/lib/core/integrity_engine.dart": "cb69bc18b4bbd620d83483116987140f8b9375658267b6250782b24f0855671a",
+      "app/lib/core/atomic_file_promoter.dart": "dfd7b748bbbf6fda713e84a083fc1f8cc8f5a3273f506c371e9320ff90321ba8",
+      "app/lib/core/transfer_diagnostics.dart": "0ad186b5ace18179c467c9a1f8a258f5b906ae701fb9ab63f7d324b3092b5bb8",
+      "app/tool/storage_reliability/controller.dart": "159b20c31ee67e642566c4c111cb3f4239af5520d0b198e62d2ca3ff7890707b",
+      "app/tool/storage_reliability/disk_full.dart": "ac7c7bfefd7932ab9277b27b3bce7bd98abcb1ce5d52ad93d2fa813eb964365a",
+      "app/tool/storage_reliability/environment.dart": "b0903b2228723390baded25f4ea8a6f2a9d4fdd6ba6086fc208589b56722c1fe",
+      "app/tool/storage_reliability/model.dart": "9e765c728c8653b326c0f5cbe1befa61c1f8e70a21b263c60e1b091e893014b1",
+      "app/tool/storage_reliability/process_worker.dart": "d8851d4a3656c2ceb9ad27c5428954df7044c7d403a7e0cd58a5c685d296d944",
+      "app/tool/storage_reliability/worker.dart": "7d2b43ec1e7609dd95a4bfd60c93d6a8eb54f8c8d55b7a811b32192e2ca800a4"
+    }
+  },
+  "summary": {
+    "passed": 1,
+    "failed": 0,
+    "skipped": 1
+  },
+  "workspace": "<RUN_WORKSPACE>",
+  "workspaceRetained": false,
+  "records": [
+    {
+      "kind": "benchmark",
+      "id": "benchmark-1MiB",
+      "seed": 5904128,
+      "status": "passed",
+      "sizeBytes": 1048576,
+      "fixture": {
+        "sizeBytes": 1048576,
+        "sha256": "e6fcaa56ec30bb02be8ed880701fd33b34f4c6e7ec7c1d37269497cf2c4afa6e",
+        "fixtureGenerationMicros": 478594
+      },
+      "cacheControl": "new destination; OS caches not evicted",
+      "warmup": {
+        "type": "result",
+        "status": "passed",
+        "operation": "engine",
+        "state": "committed",
+        "sha256": "e6fcaa56ec30bb02be8ed880701fd33b34f4c6e7ec7c1d37269497cf2c4afa6e",
+        "destinationFileName": "source.bin",
+        "byteSize": 1048576,
+        "byteForByteVerified": true,
+        "resumedBytes": 0,
+        "transferredBytes": 1048576,
+        "reusedExistingCopy": false,
+        "endToEndMicros": 6629597,
+        "endToEndMiBs": 0.15083873122302907,
+        "copyCheckpointMiBs": 0.27567225435948106,
+        "metrics": {
+          "sourceHashMicros": 1277265,
+          "recoveryValidationMicros": 2192,
+          "copyCheckpointMicros": 3627496,
+          "verificationMicros": 152960,
+          "finalVerificationMicros": 50341,
+          "copyBytesWritten": 1048576,
+          "checkpointMetadataBytesWritten": 443
+        },
+        "logicalWriteAmplification": 1.000422477722168,
+        "physicalWriteAmplification": null,
+        "processCpuMicros": 562500,
+        "rssBeforeBytes": 210952192,
+        "rssAfterBytes": 211771392,
+        "maxRssBytes": 285069312,
+        "history": [
+          "pending -> hashingSource",
+          "hashingSource -> copying",
+          "copying -> checkpointed",
+          "checkpointed -> verifying",
+          "verifying -> promoting",
+          "promoting -> committed"
+        ],
+        "pid": 15832,
+        "exitCode": 0,
+        "controllerLatencyMicros": 11141708
+      },
+      "samples": [
+        {
+          "type": "result",
+          "status": "passed",
+          "operation": "engine",
+          "state": "committed",
+          "sha256": "e6fcaa56ec30bb02be8ed880701fd33b34f4c6e7ec7c1d37269497cf2c4afa6e",
+          "destinationFileName": "source.bin",
+          "byteSize": 1048576,
+          "byteForByteVerified": true,
+          "resumedBytes": 0,
+          "transferredBytes": 1048576,
+          "reusedExistingCopy": false,
+          "endToEndMicros": 5701314,
+          "endToEndMiBs": 0.17539816259900787,
+          "copyCheckpointMiBs": 0.3138088772138039,
+          "metrics": {
+            "sourceHashMicros": 2018174,
+            "recoveryValidationMicros": 41246,
+            "copyCheckpointMicros": 3186653,
+            "verificationMicros": 76850,
+            "finalVerificationMicros": 30676,
+            "copyBytesWritten": 1048576,
+            "checkpointMetadataBytesWritten": 443
+          },
+          "logicalWriteAmplification": 1.000422477722168,
+          "physicalWriteAmplification": null,
+          "processCpuMicros": 500000,
+          "rssBeforeBytes": 210997248,
+          "rssAfterBytes": 218173440,
+          "maxRssBytes": 285450240,
+          "history": [
+            "pending -> hashingSource",
+            "hashingSource -> copying",
+            "copying -> checkpointed",
+            "checkpointed -> verifying",
+            "verifying -> promoting",
+            "promoting -> committed"
+          ],
+          "pid": 20912,
+          "exitCode": 0,
+          "controllerLatencyMicros": 11029005
+        },
+        {
+          "type": "result",
+          "status": "passed",
+          "operation": "engine",
+          "state": "committed",
+          "sha256": "e6fcaa56ec30bb02be8ed880701fd33b34f4c6e7ec7c1d37269497cf2c4afa6e",
+          "destinationFileName": "source.bin",
+          "byteSize": 1048576,
+          "byteForByteVerified": true,
+          "resumedBytes": 0,
+          "transferredBytes": 1048576,
+          "reusedExistingCopy": false,
+          "endToEndMicros": 1391904,
+          "endToEndMiBs": 0.7184403522081982,
+          "copyCheckpointMiBs": 1.544897820458155,
+          "metrics": {
+            "sourceHashMicros": 347338,
+            "recoveryValidationMicros": 2415,
+            "copyCheckpointMicros": 647292,
+            "verificationMicros": 60225,
+            "finalVerificationMicros": 42882,
+            "copyBytesWritten": 1048576,
+            "checkpointMetadataBytesWritten": 443
+          },
+          "logicalWriteAmplification": 1.000422477722168,
+          "physicalWriteAmplification": null,
+          "processCpuMicros": 343750,
+          "rssBeforeBytes": 210923520,
+          "rssAfterBytes": 217915392,
+          "maxRssBytes": 284524544,
+          "history": [
+            "pending -> hashingSource",
+            "hashingSource -> copying",
+            "copying -> checkpointed",
+            "checkpointed -> verifying",
+            "verifying -> promoting",
+            "promoting -> committed"
+          ],
+          "pid": 21376,
+          "exitCode": 0,
+          "controllerLatencyMicros": 6296703
+        }
+      ],
+      "endToEndMiBs": {
+        "count": 2,
+        "median": 0.44691925740360305,
+        "p95": null,
+        "minimum": 0.17539816259900787,
+        "maximum": 0.7184403522081982
+      },
+      "endToEndMicros": {
+        "count": 2,
+        "median": 3546609.0,
+        "p95": null,
+        "minimum": 1391904.0,
+        "maximum": 5701314.0
+      },
+      "resume": {
+        "type": "result",
+        "status": "passed",
+        "operation": "engine",
+        "state": "committed",
+        "sha256": "e6fcaa56ec30bb02be8ed880701fd33b34f4c6e7ec7c1d37269497cf2c4afa6e",
+        "destinationFileName": "source.bin",
+        "byteSize": 1048576,
+        "byteForByteVerified": true,
+        "resumedBytes": 1048576,
+        "transferredBytes": 0,
+        "reusedExistingCopy": false,
+        "endToEndMicros": 1394445,
+        "endToEndMiBs": 0.7171311883939488,
+        "copyCheckpointMiBs": 0.0,
+        "metrics": {
+          "sourceHashMicros": 746052,
+          "recoveryValidationMicros": 273349,
+          "copyCheckpointMicros": 96238,
+          "verificationMicros": 73018,
+          "finalVerificationMicros": 40248,
+          "copyBytesWritten": 0,
+          "checkpointMetadataBytesWritten": 0
+        },
+        "logicalWriteAmplification": 0.0,
+        "physicalWriteAmplification": null,
+        "processCpuMicros": 359375,
+        "rssBeforeBytes": 210841600,
+        "rssAfterBytes": 215023616,
+        "maxRssBytes": 284352512,
+        "history": [
+          "pending -> hashingSource",
+          "hashingSource -> copying",
+          "copying -> verifying",
+          "verifying -> promoting",
+          "promoting -> committed"
+        ],
+        "pid": 22280,
+        "exitCode": 0,
+        "controllerLatencyMicros": 4564099
+      },
+      "interruptedAtBytes": 1048576,
+      "physicalWriteAmplification": null
+    },
+    {
+      "kind": "diskFull",
+      "id": "real-disk-full",
+      "seed": 5904128,
+      "status": "skipped",
+      "reason": "Disabled: no explicit disposable-volume opt-in",
+      "realEnospcObserved": false
+    }
+  ],
+  "pathRedactions": {
+    "appliedBeforePublication": true,
+    "description": "Machine-specific repository and temporary root strings replaced; measurements unchanged.",
+    "originalArtifactSha256": "81d3b370f5d910bbc24ff3d5bf273dd2c120848ee531bfe043ab7417d923d1e5"
+  }
+}

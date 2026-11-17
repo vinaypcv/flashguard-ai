@@ -315,3 +315,209 @@ process-writer stress test, or physical crash-durability test is claimed.
 
 Changes remain uncommitted on `feature/verified-storage-v2`. The preexisting
 untracked `.vscode/` directory was not modified.
+
+## Milestone 3, Increment 4: real processes and measured storage (2026-11-16)
+
+Increment 3 was explicitly preserved and pushed as `9d6495e`
+(`feat: add native atomic promotion and concurrency verification`) before this
+work. The clean pre-edit Increment 4 baseline passed all 39 Flutter tests in
+4:32. Increment 4 remains uncommitted.
+
+### Production path and new experiments
+
+`benchmarks/storage_reliability/run.dart` starts a standalone Dart controller.
+Its OS-process worker calls the existing `IntegrityEngine.verifiedOffload` or,
+for the separate native races, `NativeAtomicFilePromoter.promoteNoReplace`.
+The engine is usable without a Flutter UI or method-channel stubs. Optional
+`TransferDiagnostics` and `onProbe` observations expose real operation boundaries
+and completed logical write counts; the checkpoint schema, default public API,
+source-preservation policy, and cancellation behavior are unchanged.
+
+The controller waits for flushed JSON IPC gates, sends a real process kill,
+waits for exit, inspects the part/journal, and launches a fresh VM. Tests cover
+an uncheckpointed flushed block, a saved checkpoint, an opened/read verification
+stream, immediately before promotion, and immediately after native promotion.
+The verification kill suspends the first read chunk before hashing that chunk;
+it does not claim an arbitrary kill inside a native syscall or SHA instruction.
+Each restart checks the expected reuse offset, original source digest and final
+digest. A killed process's native workspace lock must be reacquirable.
+
+Each platform also ran five barrier-controlled races between different PIDs and
+different native part files, plus an occupied-destination race. Exactly one
+writer may win an empty destination; both must fail on the occupied target.
+Losing parts and existing final content must remain intact. A separate full
+engine experiment demonstrates workspace exclusion, process-death lock release,
+rejection of another source's checkpoint, and numbered-name retry behavior.
+No timing sleeps authorize termination or release the writer barriers.
+
+### Actual platform evidence
+
+| Environment | Filesystem used for fixtures | Reliability result |
+| --- | --- | --- |
+| Windows x64, build 26300, Dart 3.13.7 | Local NTFS on C:, bounded temporary fixtures | 12 passed, 0 failed, 1 explicit disk-full skip |
+| Ubuntu 24.04 in WSL2, kernel `6.18.33.1-microsoft-standard-WSL2`, Dart 3.13.7 | ext4, `/dev/sdd`, fixtures under `/tmp` | 12 passed, 0 failed, 1 explicit disk-full skip |
+
+These are executed results, not inferred from workflow YAML. The Linux process
+experiments exercised real glibc `renameat2(RENAME_NOREPLACE)`, `flock`, and
+file/directory `fsync` on ext4. They used a workspace-local Linux Dart SDK and
+translated package paths in ignored `.tools/`; no global toolchain was changed.
+Remote CI for the new jobs has not run: the new workflow and harness are still
+uncommitted. WSL execution does not establish bare-metal Linux behavior.
+
+The JSON artifacts include UTC start/end times, actual platform/kernel and
+filesystem, capability outcomes, base Git revision, dirty-tree flag, relevant
+source SHA-256 values, seed, PIDs, kill exit codes, checkpoint snapshots,
+transition histories, final digests and recovery outcomes. Records intentionally
+contain expected failing child attempts inside a passing recovery experiment.
+The default seed is `5904128`; native race rounds vary it by round. Fixture
+generation is deterministic and outside measured transfer intervals.
+
+### Safe disk exhaustion and measured limitations
+
+No disposable volume was supplied, so **real ENOSPC testing was SKIPPED** on
+both systems. No system drive was deliberately filled, and no simulated fault
+was labelled real disk exhaustion. The opt-in implementation requires matching
+absolute approved paths, a regular approval marker, a non-system volume, bounded
+capacity/allocation, and either a labelled tiny Windows volume outside C: or a
+separately named disposable Linux tmpfs. It rejects filesystem roots, C:, shared
+`/tmp`/`/dev/shm`, missing approvals, and normal oversized disks. The new policy
+tests exercise rejections without allocating disk-filling data.
+
+The opt-in test pauses an actual engine worker after its first checkpoint,
+writes a private filler up to the allocation cap, requires real disk-full OS
+errors from filler and production transfer, then removes its filler and
+restarts. Cap exhaustion without ENOSPC is a skip. This path has been
+implemented but has not been executed against an exhausted volume here. Only
+its private new experiment subdirectory can be cleaned up; unrelated files
+are never selected for deletion. See the harness README for prerequisites and
+manual cleanup after a controller crash.
+
+Benchmark samples use fresh destinations and an excluded warm-up. OS caches
+are not evicted, so these are new-destination measurements rather than a
+controlled cold-device-cache benchmark. Each sample starts a new JIT VM.
+Reports distinguish engine latency from controller/VM startup latency and
+separately measure hashing, recovery validation, copy/checkpoint work, final
+verification, completed logical data/journal bytes, CPU time and RSS where
+available. Physical write amplification is null; logical ratios exclude failed
+partial writes, OS metadata and device counters. p95 remains null below 20
+samples. No timing constants stand in for measured results.
+
+Physical power-loss durability, hardware disconnect, real ENOSPC recovery,
+external-device performance, and bare-metal Linux remain unproven. Native sync
+API completion and process-kill recovery do not establish physical crash
+consistency. Windows directory sync and the earlier namespace-stability
+assumptions remain limitations.
+
+### Commands and observed verification
+
+```text
+dart format app/lib app/test app/tool benchmarks/storage_reliability
+
+# From app, using the embedded Flutter SDK:
+flutter test --no-pub --concurrency=1 --timeout 2m --reporter expanded
+04:03 +43: All tests passed!
+
+flutter analyze --no-pub --fatal-infos
+No issues found! (ran in 222.6s)
+
+# From mcp-server, using .venv/Scripts/python.exe:
+python -m unittest discover -p "test_*.py" -v
+Ran 3 tests in 2.203s
+OK
+```
+
+All 39 existing tests and all 100 seeds `0x5a1700`–`0x5a1763` passed.
+Four new tests verify diagnostic boundaries/write counts, default disk-full
+skip behavior, unsafe-volume rejection, and bounded benchmark/statistics options.
+Formatting and final diff results plus measured benchmark tables follow below.
+
+### Benchmark results and commands
+
+Each main benchmark size has one excluded warm-up and three measured fresh
+worker processes. All six size/platform experiments passed, each with a
+separate killed/restarted transfer. Disk-full remained an explicit skip in
+each invocation. These are observations from this host, not speed guarantees.
+
+| Platform | Size MiB | Median engine seconds | Median MiB/s | Median pre/post byte-verification seconds | Median journal bytes written |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Windows NTFS | 1 | 1.362315 | 0.7340 | 0.073076 | 443 |
+| Windows NTFS | 16 | 4.147573 | 3.8577 | 0.889765 | 2,184 |
+| Windows NTFS | 128 | 19.625512 | 6.5221 | 6.950253 | 47,598 |
+| WSL2 ext4 | 1 | 1.405955 | 0.7113 | 0.091580 | 406 |
+| WSL2 ext4 | 16 | 4.731474 | 3.3816 | 0.981255 | 2,036 |
+| WSL2 ext4 | 128 | 30.069276 | 4.2568 | 7.050815 | 46,414 |
+
+Initial source SHA-256 time is separately recorded in each sample's metrics.
+For 128 MiB its median was 1.817199 s on Windows and 1.914433 s on WSL.
+Median worker CPU time for that size was 13.21875 s / 13.05 s, and median
+per-worker peak RSS was 271.50 / 254.12 MiB, respectively. Logical write ratios
+were 1.000355 / 1.000346; physical device write amplification remains null.
+
+| Size MiB | Reused MiB | Transferred by restart MiB | Windows restart engine seconds | WSL restart engine seconds |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 1 | 0 | 0.993061 | 0.477024 |
+| 16 | 4 | 12 | 4.160384 | 3.689649 |
+| 128 | 4 | 124 | 18.220621 | 26.166838 |
+
+The separate uncheckpointed-block kill case required recopying its first
+256 KiB. Checkpointed benchmark restarts reused their saved prefixes. Controller
+latency, including VM startup/exit and IPC, is also available in raw JSON.
+With three samples, p95 is intentionally null. The earlier two-sample Windows
+smoke artifact is retained as an initial run, not pooled with the main results.
+
+Exact Windows commands from the repository root:
+
+```powershell
+.\.tools\flutter\bin\dart.bat --packages=app/.dart_tool/package_config.json benchmarks/storage_reliability/run.dart --suite=reliability --rounds=5 --output=benchmarks/storage_reliability/results/windows-reliability.json
+.\.tools\flutter\bin\dart.bat --packages=app/.dart_tool/package_config.json benchmarks/storage_reliability/run.dart --suite=benchmark --sizes-mib=1,16,128 --samples=3 --output=benchmarks/storage_reliability/results/windows-benchmarks.json
+.\.tools\flutter\bin\dart.bat --packages=app/.dart_tool/package_config.json benchmarks/storage_reliability/run.dart --suite=smoke --output=benchmarks/storage_reliability/results/windows-smoke.json
+```
+
+WSL commands used for the actual Linux runs, with the repository location
+parameterized for publication (workspace-local SDK and translated package
+configuration were prepared under ignored `.tools/`). Set `$repoWslPath` to
+the output of `wsl -d Ubuntu-24.04 -- wslpath -u (Get-Location).Path`:
+
+```powershell
+wsl -d Ubuntu-24.04 --cd "$repoWslPath" --exec "$repoWslPath/.tools/linux-dart/dart-sdk/bin/dart" "--packages=$repoWslPath/.tools/linux-package-config.json" benchmarks/storage_reliability/run.dart --suite=reliability --rounds=5 --output=benchmarks/storage_reliability/results/linux-wsl-reliability.json
+wsl -d Ubuntu-24.04 --cd "$repoWslPath" --exec "$repoWslPath/.tools/linux-dart/dart-sdk/bin/dart" "--packages=$repoWslPath/.tools/linux-package-config.json" benchmarks/storage_reliability/run.dart --suite=benchmark --sizes-mib=1,16,128 --samples=3 --output=benchmarks/storage_reliability/results/linux-wsl-benchmarks.json
+```
+
+For normal Linux/CI, resolve dependencies with Flutter in `app` and use `dart`
+on PATH with `--packages=app/.dart_tool/package_config.json`, as documented in
+`benchmarks/storage_reliability/README.md`. Native SDK download URLs follow the
+[official Dart SDK archive](https://dart.dev/get-dart/archive).
+
+### Increment 4 file manifest
+
+```text
+.github/workflows/verify.yml
+app/lib/core/integrity_engine.dart
+app/lib/core/transfer_diagnostics.dart
+app/test/reliability_diagnostics_test.dart
+app/tool/storage_reliability/controller.dart
+app/tool/storage_reliability/disk_full.dart
+app/tool/storage_reliability/environment.dart
+app/tool/storage_reliability/model.dart
+app/tool/storage_reliability/process_worker.dart
+app/tool/storage_reliability/worker.dart
+benchmarks/storage_reliability/run.dart
+benchmarks/storage_reliability/README.md
+benchmarks/storage_reliability/results/windows-smoke.json
+benchmarks/storage_reliability/results/windows-reliability.json
+benchmarks/storage_reliability/results/windows-benchmarks.json
+benchmarks/storage_reliability/results/linux-wsl-reliability.json
+benchmarks/storage_reliability/results/linux-wsl-benchmarks.json
+docs/VERIFICATION.md
+```
+
+The workflow adds independent Windows/Linux real-process jobs and a bounded
+performance smoke job alongside the existing Flutter/MCP regressions. All
+shared CI commands leave disk exhaustion disabled. JSON artifacts are uploaded
+even after a failure. The preexisting `.vscode/` directory remains untouched.
+
+Final formatting reported `Formatted 23 files (0 changed) in 0.10 seconds`.
+`git diff --check` exited 0 (line-ending conversion warnings only).
+`git status --short --branch` showed only the Increment 4 paths above and the
+preexisting untracked `.vscode/`; the branch remains synchronized at Increment
+3 commit `9d6495e`, with no staged Increment 4 files and no Increment 4 commit.
