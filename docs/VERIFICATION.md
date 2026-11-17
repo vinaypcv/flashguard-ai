@@ -521,3 +521,201 @@ Final formatting reported `Formatted 23 files (0 changed) in 0.10 seconds`.
 `git status --short --branch` showed only the Increment 4 paths above and the
 preexisting untracked `.vscode/`; the branch remains synchronized at Increment
 3 commit `9d6495e`, with no staged Increment 4 files and no Increment 4 commit.
+
+## Milestone 3, Increment 5: phase profiling and controlled optimization (2026-11-17)
+
+Increment 4 was reviewed, location strings in its evidence were redacted, and
+its 18 intended files were committed and pushed as b8f2be7 before this work.
+Measured values, seeds and hashes were preserved; private originals remain
+under ignored .tools/. The pre-edit Flutter baseline passed 43/43 in 2:49.
+
+The engine now has optional exclusive phase ledgers for setup, source hashing,
+checkpoint loading/validation, source reads, block writes, part flushes, block
+hashes, checkpoint serialization, checkpoint persistence, temporary-file
+verification, source consistency, media inspection, durability, atomic promotion,
+final verification, reuse and cleanup. Each phase records elapsed microseconds,
+completed operation counts and observable read/write bytes. Total and
+unattributed time expose coverage. Existing aggregate timing fields remain
+available and must not be added to the exclusive ledger.
+
+A fresh diagnostics instance is scoped to one attempt. Omitting it or setting
+enabled:false disables phase collection. Tests demonstrate identical checkpoint
+bytes and verified output with profiling on/off. Native I/O remains asynchronous
+or on worker isolates. No source consistency check, trusted digest validation,
+required data flush, checkpoint validation, native sync, or final-file
+verification was removed.
+
+The measured 128 MiB Windows profile has ten samples and a 19.463428 s median.
+Median phase shares identify part flushes (24.97%) and journal persistence
+(13.02%) as substantial costs. JSON serialization (0.04%) and source reads
+(0.51%) are small in that run. Allocation/GC costs are not independently
+isolated by a heap profiler; RSS is recorded. These observations selected an
+opt-in 16 MiB checkpoint-block experiment against the 4 MiB baseline.
+Buffer-reuse and JSON-encoding changes were deferred and not benchmarked.
+
+The A/B runner uses one excluded warm-up per variant, at least ten matched
+pairs per size, alternating order, fresh destinations and the same source.
+Raw samples and per-phase distributions are preserved. The environments run
+separately; caches and background host load are uncontrolled. p95 uses nearest
+rank only at 20 or more samples per configuration and is null with ten.
+The paired 5% observation band is descriptive, not statistical significance.
+Distribution-median changes and paired-median changes are distinct statistics.
+
+The larger-block option preserves the checkpoint protocol, but increases the
+maximum uncheckpointed recopy tail from one 4 MiB block to one 16 MiB block and
+uses a larger read buffer. Mismatched checkpoint block sizes are explicitly
+rejected and restarted. Production defaults remain 4 MiB. CI process jobs
+now cover both settings on Windows and Linux. No new remote CI run is claimed.
+
+Completed Windows A/B: 60 measured transfers, all verified; each of the three
+sizes has ten samples per variant. The 1 MiB distribution median regressed
+28.30%, while its paired median change was -0.06% (5/10 pairs faster).
+The 16 MiB/128 MiB median throughput changes were +18.99%/+36.48%; paired
+median latency changes were -21.10%/-17.97% (7/10 and 9/10 pairs faster).
+The raw 128 MiB maximum was 56.656 s for baseline and 109.892 s for candidate.
+These outliers were retained. The candidate outlier included long source
+consistency/final verification intervals as well as flush waits; no single
+cause is established. The candidate is not a universal or tail-latency win.
+
+
+The completed WSL A/B run also verified all 60 measured transfers. At
+1 / 16 / 128 MiB, baseline median engine seconds were
+0.970433 / 3.967589 / 31.533759; candidate medians were
+0.964248 / 3.445992 / 21.587491. Median throughput changes were
++1.22% / +15.31% / +46.07%. Paired median latency changes were
+-3.72% / -6.13% / -34.23%, with 6/10, 6/10 and 10/10 pairs faster.
+These are WSL ext4 observations and must not be interpreted as a
+cross-platform hardware comparison.
+
+Both platforms used seed `5904128`. Each size/configuration has ten measured
+samples plus an excluded warm-up, for 120 measured A/B transfers overall.
+Raw samples, minimum/maximum, phase contribution distributions, metadata bytes,
+CPU/RSS, order, process IDs and configuration are retained. Full tables,
+candidate decision, commands and limitations are in
+[INCREMENT5.md](../benchmarks/storage_reliability/INCREMENT5.md).
+The two `.json.md` comparisons are generated from authoritative JSON.
+Their paired-median labels were clarified after collection; source hashes
+remain the collection-time values. Engine, diagnostics, controller and
+options hashes still match the A/B artifacts. The later worker reporting fix
+returns null for logicalWriteAmplification when profiling is disabled; it
+does not change the enabled A/B path or any transfer operations.
+
+The candidate remains opt-in. The 4 MiB production default is unchanged.
+At 128 MiB, checkpoint counts decrease from 32 to 8 and flush counts from 33
+to 9. Median journal bytes decrease from 47,502 to 5,447 on Windows and
+46,318 to 5,151 on WSL. All required whole-file hash passes and native sync
+requests remain present. A read-only consistency audit of all 120 samples
+passed digest/state, fresh-copy byte, hash-byte, checkpoint/flush operation,
+sync-count and nonnegative-unattributed-time assertions.
+No Windows exploratory median throughput target was met by the candidate.
+Buffer reuse, JSON-allocation and independent checkpoint-frequency changes
+remain deferred and have no measured improvement claim.
+
+### Process recovery and independent writers
+
+| Executed environment | Block MiB | Passed | Failed | Explicit real ENOSPC skip |
+| --- | ---: | ---: | ---: | ---: |
+| Windows NTFS | 4 | 12 | 0 | 1 |
+| Windows NTFS | 16 | 12 | 0 | 1 |
+| WSL2 ext4 | 4 | 12 | 0 | 1 |
+| WSL2 ext4 | 16 | 12 | 0 | 1 |
+
+Each run executed five gate-synchronized process kills/restarts, five
+independent-PID native races, one occupied-target race, and one full-engine
+workspace exclusion/kill/restart experiment. This totals 48 passing
+experiments across the four configurations, including 20 empty-target and
+four occupied-target races. Larger-block kill fixtures contain at least two
+blocks. Checkpointed prefixes were reused, uncheckpointed bytes recopied,
+source/final digests matched, destination contents were preserved, and
+process death released the workspace lock. Correctness jobs ran after the
+A/B measurements; their timing is not used for performance claims.
+
+The new CI matrix covers both block settings on Windows/Linux, with distinct
+artifact names. No new remote CI result is claimed because Increment 5 is
+uncommitted. No approved disposable volume was supplied: real ENOSPC remains
+explicitly skipped. No physical power-loss, disconnect, external-device or
+bare-metal Linux test was performed. Native sync completion and process-kill
+recovery do not prove crash consistency; Windows directory sync and namespace
+stability remain limitations.
+
+### Final regression commands and observed results
+
+The embedded `flutter.bat` bootstrap stalled, so the completed Flutter checks
+used its pinned Dart executable and `flutter_tools.snapshot` directly.
+No tests were excluded.
+
+```text
+# Repository root:
+.tools\flutter\bin\cache\dart-sdk\bin\dart.exe format app/lib app/test app/tool benchmarks/storage_reliability
+Formatted 26 files (0 changed) in 0.10 seconds.
+
+# From app:
+..\.tools\flutter\bin\cache\dart-sdk\bin\dart.exe ..\.tools\flutter\bin\cache\flutter_tools.snapshot test --no-pub --concurrency=1 --timeout 2m --reporter expanded
+02:45 +47: All tests passed!
+
+..\.tools\flutter\bin\cache\dart-sdk\bin\dart.exe ..\.tools\flutter\bin\cache\flutter_tools.snapshot analyze --no-pub --fatal-infos
+No issues found! (ran in 10.2s)
+
+# From mcp-server:
+.venv\Scripts\python.exe -m unittest discover -p test_*.py -v
+Ran 3 tests in 0.473s
+OK
+
+git diff --check
+Exit code 0; Git line-ending conversion warnings only.
+
+git diff --cached --name-only
+Empty.
+```
+
+All 43 preexisting Flutter tests and all 100 original seeded recovery
+scenarios passed. Four new tests verify profiling-on/off equivalence,
+phase counters, incompatible-block checkpoint restart, paired A/B statistics
+and report rendering, and publication path redaction.
+
+
+The final reporting follow-up was checked with the existing bounded smoke
+suite at `--profiling=false`: one excluded warm-up, two verified measured
+copies, and a real killed/restarted copy all passed. The saved checkpoint
+was reused, phase ledgers remained empty, and unavailable logical write
+amplification was null. This two-sample smoke check is regression evidence,
+not part of the ten-sample A/B performance claims.
+
+```powershell
+& $dart --packages=app/.dart_tool/package_config.json benchmarks/storage_reliability/run.dart --suite=smoke --profiling=false --output=benchmarks/storage_reliability/results/increment5-windows-profiling-disabled-smoke.json
+```
+
+The full 47-test regression ran before this reporting-only worker fix;
+the production engine and verification behavior were unchanged. Final static
+analysis after the fix reported no issues in 10.2 s.
+
+### Increment 5 file manifest
+
+```text
+.github/workflows/verify.yml
+app/lib/core/integrity_engine.dart
+app/lib/core/transfer_diagnostics.dart
+app/test/performance_profiling_test.dart
+app/tool/storage_reliability/ab.dart
+app/tool/storage_reliability/controller.dart
+app/tool/storage_reliability/model.dart
+app/tool/storage_reliability/publication.dart
+app/tool/storage_reliability/worker.dart
+benchmarks/storage_reliability/README.md
+benchmarks/storage_reliability/INCREMENT5.md
+benchmarks/storage_reliability/results/increment5-windows-profile-baseline.json
+benchmarks/storage_reliability/results/increment5-windows-profiling-disabled-smoke.json
+benchmarks/storage_reliability/results/increment5-windows-ab.json
+benchmarks/storage_reliability/results/increment5-windows-ab.json.md
+benchmarks/storage_reliability/results/increment5-linux-ab.json
+benchmarks/storage_reliability/results/increment5-linux-ab.json.md
+benchmarks/storage_reliability/results/increment5-windows-block4-reliability.json
+benchmarks/storage_reliability/results/increment5-windows-block16-reliability.json
+benchmarks/storage_reliability/results/increment5-linux-block4-reliability.json
+benchmarks/storage_reliability/results/increment5-linux-block16-reliability.json
+docs/VERIFICATION.md
+```
+
+Increment 5 remains unstaged and uncommitted on `feature/verified-storage-v2`.
+Increment 4 is committed and pushed as `b8f2be7`. No `.vscode/` file was
+modified; its preexisting untracked directory remains outside the manifest.

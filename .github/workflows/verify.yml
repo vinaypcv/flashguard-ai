@@ -54,11 +54,12 @@ jobs:
         working-directory: ./app
 
   verify-real-filesystem:
-    name: Native process recovery (${{ matrix.os }})
+    name: Native process recovery (${{ matrix.os }}, ${{ matrix.blockMiB }} MiB)
     strategy:
       fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest]
+        blockMiB: [4, 16]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
@@ -74,11 +75,11 @@ jobs:
         run: flutter test --no-pub test/atomic_file_promoter_native_test.dart --reporter expanded
         working-directory: app
       - name: Kill and restart independent production workers
-        run: dart --packages=app/.dart_tool/package_config.json benchmarks/storage_reliability/run.dart --suite=reliability --rounds=5 --output=benchmarks/storage_reliability/results/ci-${{ runner.os }}-reliability.json
+        run: dart --packages=app/.dart_tool/package_config.json benchmarks/storage_reliability/run.dart --suite=reliability --rounds=5 --block-mib=${{ matrix.blockMiB }} --output=benchmarks/storage_reliability/results/ci-${{ runner.os }}-block-${{ matrix.blockMiB }}-reliability.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: filesystem-evidence-${{ runner.os }}
+          name: filesystem-evidence-${{ runner.os }}-block-${{ matrix.blockMiB }}
           path: benchmarks/storage_reliability/results/ci-*.json
 
   verify-performance-smoke:

@@ -181,7 +181,9 @@ class IntegrityEngine {
       throw ArgumentError.value(checkpointBlockBytes, 'checkpointBlockBytes');
     }
     final timer = Stopwatch()..start();
-    final metrics = diagnostics ?? TransferDiagnostics();
+    final metrics = diagnostics?.enabled == true ? diagnostics : null;
+    final profileTotal = metrics?.begin();
+    if (metrics != null) metrics.blockBytes = checkpointBlockBytes;
     final state = lifecycle ?? TransferStateMachine();
     final fileName = source.uri.pathSegments.last;
     late final File finalFile;
@@ -194,6 +196,7 @@ class IntegrityEngine {
     var discardPartial = false;
     var pathsReady = false;
     try {
+      var setupClock = metrics?.begin();
       await _validateDestination(
           destinationRoot ?? destinationDir, destinationDir);
       if (!await destinationDir.exists()) {
@@ -203,10 +206,14 @@ class IntegrityEngine {
           destinationRoot ?? destinationDir, destinationDir);
       state.transition(TransferState.hashingSource);
       final totalBytes = await source.length();
-      final sourceHashTimer = Stopwatch()..start();
+      metrics?.finish(TransferPhase.setup, setupClock);
+      final sourceHashTimer = metrics?.begin();
       final sourceDigest =
-          (await sha256.bind(source.openRead()).single).toString();
-      metrics.sourceHashMicros = sourceHashTimer.elapsedMicroseconds;
+          await _fileDigest(source, metrics, TransferPhase.sourceHash);
+      final hashMicros =
+          metrics?.finish(TransferPhase.sourceHash, sourceHashTimer) ?? 0;
+      if (metrics != null) metrics.sourceHashMicros = hashMicros;
+      setupClock = metrics?.begin();
       if (expectedSha256 != null &&
           sourceDigest != expectedSha256.toLowerCase()) {
         throw FileSystemException(
@@ -229,18 +236,23 @@ class IntegrityEngine {
               'Destination is a symbolic link', candidate.path);
         }
         if (await candidate.exists()) {
+          metrics?.finish(TransferPhase.setup, setupClock);
+          final reuseClock = metrics?.begin();
           final existingResult = await _reuseExistingCopy(
             source: source,
             candidate: candidate,
             fileName: fileName,
             totalBytes: totalBytes,
             sourceDigest: sourceDigest,
+            metrics: metrics,
           );
+          metrics?.finish(TransferPhase.existingCopyVerification, reuseClock);
           if (existingResult != null) {
             state.transition(TransferState.verifying);
             state.transition(TransferState.committed);
             return existingResult;
           }
+          setupClock = metrics?.begin();
           copyNumber++;
           continue;
         }
@@ -275,13 +287,14 @@ class IntegrityEngine {
       }
 
       var resumedBytes = 0;
-      final recoveryTimer = Stopwatch()..start();
+      metrics?.finish(TransferPhase.setup, setupClock);
+      final recoveryTimer = metrics?.begin();
       var blockHashes = <String>[];
       final checkpointFiles = [checkpointFile, checkpointBackupFile];
       final checkpointCandidates = <Map<String, dynamic>>[];
       for (final candidateFile in checkpointFiles) {
         if (!await candidateFile.exists()) continue;
-        final candidate = await _readCheckpoint(candidateFile);
+        final candidate = await _readCheckpoint(candidateFile, metrics);
         if (candidate != null &&
             candidate['sourcePath'] == source.absolute.path &&
             candidate['sourceBytes'] == totalBytes &&
@@ -316,6 +329,8 @@ class IntegrityEngine {
                   .clamp(0, checkpointBlockBytes);
               final srcBlock = await sourceReader.read(count);
               final dstBlock = await partReader.read(count);
+              metrics?.read(TransferPhase.checkpointValidation,
+                  srcBlock.length + dstBlock.length);
               if (srcBlock.length != count ||
                   dstBlock.length != count ||
                   sha256.convert(srcBlock).toString() != savedHashes[i] ||
@@ -368,39 +383,56 @@ class IntegrityEngine {
       }
 
       output = await tempFile.open(mode: FileMode.append);
-      metrics.recoveryValidationMicros = recoveryTimer.elapsedMicroseconds;
+      final recoveryMicros =
+          metrics?.finish(TransferPhase.checkpointValidation, recoveryTimer) ??
+              0;
+      if (metrics != null) {
+        metrics.recoveryValidationMicros = recoveryMicros;
+        metrics.resumedBytes = resumedBytes;
+      }
       state.transition(TransferState.copying);
       await output.truncate(resumedBytes);
       await output.setPosition(resumedBytes);
       final input = await source.open();
-      final copyTimer = Stopwatch()..start();
+      final copyTimer = metrics?.begin();
       var copiedBytes = resumedBytes;
       try {
         await input.setPosition(resumedBytes);
         while (copiedBytes < totalBytes) {
+          final readClock = metrics?.begin();
           final chunk = await input.read(
             (totalBytes - copiedBytes).clamp(0, checkpointBlockBytes),
           );
+          metrics?.finish(TransferPhase.sourceRead, readClock);
+          metrics?.read(TransferPhase.sourceRead, chunk.length);
           if (chunk.isEmpty) {
             throw FileSystemException(
                 'Source ended during transfer', source.path);
           }
+          final writeClock = metrics?.begin();
           await output.writeFrom(chunk);
+          metrics?.finish(TransferPhase.blockWrite, writeClock);
+          metrics?.write(TransferPhase.blockWrite, chunk.length);
+          final flushClock = metrics?.begin();
           await output.flush();
-          metrics.copyBytesWritten += chunk.length;
+          metrics?.finish(TransferPhase.dataFlush, flushClock);
+          if (metrics != null) metrics.copyBytesWritten += chunk.length;
           await onProbe?.call(TransferProbe(
               TransferProbeStage.blockFlushed, copiedBytes + chunk.length));
+          final blockHashClock = metrics?.begin();
           blockHashes.add(sha256.convert(chunk).toString());
+          metrics?.finish(TransferPhase.blockHash, blockHashClock);
           copiedBytes += chunk.length;
           final previousGeneration = checkpointCandidates.isEmpty
               ? 0
               : checkpointCandidates
                   .map((checkpoint) => checkpoint['generation'] as int)
                   .reduce((a, b) => a > b ? a : b);
-          metrics.checkpointMetadataBytesWritten += await _writeCheckpoint(
+          final checkpointBytes = await _writeCheckpoint(
             checkpointFile: checkpointFile,
             backupFile: checkpointBackupFile,
             stagingFile: checkpointStagingFile,
+            metrics: metrics,
             checkpoint: {
               'version': 2,
               'generation': previousGeneration + 1,
@@ -412,6 +444,10 @@ class IntegrityEngine {
               'blockSha256': blockHashes,
             },
           );
+          if (metrics != null) {
+            metrics.checkpointMetadataBytesWritten += checkpointBytes;
+            metrics.checkpointCount++;
+          }
           checkpointCandidates
             ..clear()
             ..add({
@@ -436,20 +472,28 @@ class IntegrityEngine {
       } finally {
         await input.close();
       }
+      final lastFlushClock = metrics?.begin();
       await output.flush();
+      metrics?.finish(TransferPhase.dataFlush, lastFlushClock);
       await output.close();
       output = null;
-      metrics.copyCheckpointMicros = copyTimer.elapsedMicroseconds;
+      if (metrics != null) {
+        metrics.copyCheckpointMicros = copyTimer!.elapsedMicroseconds;
+      }
       state.transition(TransferState.verifying);
       await onProbe?.call(
           TransferProbe(TransferProbeStage.verificationStarted, copiedBytes));
-      final verificationTimer = Stopwatch()..start();
+      final verificationTimer = metrics?.begin();
 
-      final destinationDigest =
-          (await sha256.bind(_verificationStream(tempFile, onProbe)).single)
-              .toString();
+      final tempClock = metrics?.begin();
+      final destinationDigest = await _fileDigest(
+          tempFile, metrics, TransferPhase.tempVerification,
+          onProbe: onProbe);
+      metrics?.finish(TransferPhase.tempVerification, tempClock);
+      final consistencyClock = metrics?.begin();
       final currentSourceDigest =
-          (await sha256.bind(source.openRead()).single).toString();
+          await _fileDigest(source, metrics, TransferPhase.sourceConsistency);
+      metrics?.finish(TransferPhase.sourceConsistency, consistencyClock);
       if (copiedBytes != totalBytes ||
           await source.length() != totalBytes ||
           destinationDigest != sourceDigest ||
@@ -460,44 +504,62 @@ class IntegrityEngine {
           source.path,
         );
       }
+      final mediaClock = metrics?.begin();
       final status = await inspectMediaHeader(tempFile, mediaName: fileName);
+      metrics?.finish(TransferPhase.mediaInspection, mediaClock);
       if (status == MediaIntegrityStatus.ioError) {
         throw FileSystemException('Media inspection failed', tempFile.path);
       }
-      metrics.verificationMicros = verificationTimer.elapsedMicroseconds;
+      if (metrics != null) {
+        metrics.verificationMicros = verificationTimer!.elapsedMicroseconds;
+      }
       await onProbe
           ?.call(TransferProbe(TransferProbeStage.bytesVerified, copiedBytes));
       // Complete the data and journal sync requests before the namespace move.
       // Windows reports the missing directory-sync capability explicitly.
+      final durabilityClock = metrics?.begin();
       if (capabilities.nativeFileSync) {
         await promoter.syncFile(tempFile);
+        if (metrics != null) metrics.nativeFileSyncCount++;
         for (final checkpoint in [checkpointFile, checkpointBackupFile]) {
-          if (await checkpoint.exists()) await promoter.syncFile(checkpoint);
+          if (await checkpoint.exists()) {
+            await promoter.syncFile(checkpoint);
+            if (metrics != null) metrics.nativeFileSyncCount++;
+          }
         }
       }
       if (capabilities.directorySync) {
         await promoter.syncDirectory(destinationDir);
+        if (metrics != null) metrics.directorySyncCount++;
       }
+      metrics?.finish(TransferPhase.durability, durabilityClock);
       state.transition(TransferState.promoting);
       await onProbe?.call(
           TransferProbe(TransferProbeStage.promotionStarted, copiedBytes));
       await beforePromotion?.call();
+      final promotionClock = metrics?.begin();
       await promoter.promoteNoReplace(tempFile, finalFile);
+      metrics?.finish(TransferPhase.promotion, promotionClock);
       try {
         await onProbe
             ?.call(TransferProbe(TransferProbeStage.promoted, copiedBytes));
         await afterPromotion?.call();
         if (capabilities.directorySync) {
+          final directoryClock = metrics?.begin();
           await promoter.syncDirectory(destinationDir);
+          if (metrics != null) metrics.directorySyncCount++;
+          metrics?.finish(TransferPhase.durability, directoryClock);
         }
-        final finalVerificationTimer = Stopwatch()..start();
+        final finalVerificationTimer = metrics?.begin();
         if (await FileSystemEntity.type(finalFile.path, followLinks: false) !=
                 FileSystemEntityType.file ||
             await finalFile.length() != totalBytes ||
-            (await sha256.bind(finalFile.openRead()).single).toString() !=
+            await _fileDigest(
+                    finalFile, metrics, TransferPhase.finalVerification) !=
                 sourceDigest ||
             await source.length() != totalBytes ||
-            (await sha256.bind(source.openRead()).single).toString() !=
+            await _fileDigest(
+                    source, metrics, TransferPhase.finalVerification) !=
                 sourceDigest) {
           throw PromotionException(
               PromotionFailure.verification,
@@ -505,8 +567,10 @@ class IntegrityEngine {
               finalFile.path,
               destinationMayExist: true);
         }
-        metrics.finalVerificationMicros =
-            finalVerificationTimer.elapsedMicroseconds;
+        final finalMicros = metrics?.finish(
+                TransferPhase.finalVerification, finalVerificationTimer) ??
+            0;
+        if (metrics != null) metrics.finalVerificationMicros = finalMicros;
         await onProbe?.call(
             TransferProbe(TransferProbeStage.finalVerified, copiedBytes));
       } catch (error) {
@@ -519,6 +583,7 @@ class IntegrityEngine {
             destinationMayExist: true);
       }
       state.transition(TransferState.committed);
+      final cleanupClock = metrics?.begin();
       for (final file in [
         checkpointFile,
         checkpointBackupFile,
@@ -531,6 +596,7 @@ class IntegrityEngine {
           // is harmless and must not turn a successful copy into a failed one.
         }
       }
+      metrics?.finish(TransferPhase.cleanup, cleanupClock);
       timer.stop();
       final seconds = timer.elapsedMicroseconds / 1e6;
       return FileAuditResult(
@@ -577,7 +643,13 @@ class IntegrityEngine {
       }
       rethrow;
     } finally {
+      final releaseClock = metrics?.begin();
       await workspaceLease?.release();
+      metrics?.finish(TransferPhase.cleanup, releaseClock);
+      if (metrics != null) {
+        profileTotal!.stop();
+        metrics.totalMicros = profileTotal.elapsedMicroseconds;
+      }
     }
   }
 
@@ -587,16 +659,17 @@ class IntegrityEngine {
     required String fileName,
     required int totalBytes,
     required String sourceDigest,
+    TransferDiagnostics? metrics,
   }) async {
     final existingBytes = await candidate.length();
-    final existingDigest =
-        (await sha256.bind(candidate.openRead()).single).toString();
+    final existingDigest = await _fileDigest(
+        candidate, metrics, TransferPhase.existingCopyVerification);
     if (existingBytes != totalBytes || existingDigest != sourceDigest) {
       return null;
     }
 
-    final currentSourceDigest =
-        (await sha256.bind(source.openRead()).single).toString();
+    final currentSourceDigest = await _fileDigest(
+        source, metrics, TransferPhase.existingCopyVerification);
     if (currentSourceDigest != sourceDigest ||
         await source.length() != totalBytes) {
       throw FileSystemException(
@@ -618,6 +691,21 @@ class IntegrityEngine {
       transferMbps: 0,
       reusedExistingCopy: true,
     );
+  }
+
+  static Future<String> _fileDigest(
+      File file, TransferDiagnostics? metrics, TransferPhase phase,
+      {FutureOr<void> Function(TransferProbe)? onProbe}) async {
+    Stream<List<int>> stream =
+        onProbe == null ? file.openRead() : _verificationStream(file, onProbe);
+    final accounting = metrics?.phase(phase);
+    if (accounting != null) {
+      stream = stream.map((chunk) {
+        accounting.bytesRead += chunk.length;
+        return chunk;
+      });
+    }
+    return (await sha256.bind(stream).single).toString();
   }
 
   static Stream<List<int>> _verificationStream(
@@ -674,10 +762,13 @@ class IntegrityEngine {
     }
   }
 
-  static Future<Map<String, dynamic>?> _readCheckpoint(File file) async {
+  static Future<Map<String, dynamic>?> _readCheckpoint(
+      File file, TransferDiagnostics? metrics) async {
     try {
-      final checkpoint =
-          jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      final encoded = await file.readAsString();
+      metrics?.read(
+          TransferPhase.checkpointValidation, utf8.encode(encoded).length);
+      final checkpoint = jsonDecode(encoded) as Map<String, dynamic>;
       final version = checkpoint['version'];
       if (version == 2) {
         final metadataSha256 = checkpoint['metadataSha256'];
@@ -726,22 +817,29 @@ class IntegrityEngine {
     required File backupFile,
     required File stagingFile,
     required Map<String, Object?> checkpoint,
+    TransferDiagnostics? metrics,
   }) async {
+    final serializationClock = metrics?.begin();
     final metadataSha256 =
         sha256.convert(utf8.encode(jsonEncode(checkpoint))).toString();
     final encoded =
         jsonEncode({...checkpoint, 'metadataSha256': metadataSha256});
+    final length = metrics == null ? 0 : utf8.encode(encoded).length;
+    metrics?.finish(TransferPhase.checkpointSerialization, serializationClock);
+    final persistenceClock = metrics?.begin();
     await stagingFile.writeAsString(
       encoded,
       flush: true,
     );
+    metrics?.write(TransferPhase.checkpointPersistence, length);
 
     if (await checkpointFile.exists()) {
       if (await backupFile.exists()) await backupFile.delete();
       await checkpointFile.rename(backupFile.path);
     }
     await stagingFile.rename(checkpointFile.path);
-    return utf8.encode(encoded).length;
+    metrics?.finish(TransferPhase.checkpointPersistence, persistenceClock);
+    return length;
   }
 
   static int _uint32(List<int> bytes, int start) =>

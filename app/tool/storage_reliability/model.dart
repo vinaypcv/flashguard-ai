@@ -1,7 +1,7 @@
 import 'dart:math';
 
 const mib = 1024 * 1024;
-const schemaVersion = 1;
+const schemaVersion = 2;
 
 class HarnessOptions {
   final String suite;
@@ -14,11 +14,15 @@ class HarnessOptions {
   final String? diskFullPath;
   final String? approvedPath;
   final int maxAllocation;
+  final bool profiling;
+  final int? blockMiB;
+  final int baselineBlockMiB;
+  final int candidateBlockMiB;
 
   HarnessOptions(List<String> args)
       : suite = _value(args, 'suite') ?? 'all',
         seed = int.parse(_value(args, 'seed') ?? '5904128'),
-        samples = int.parse(_value(args, 'samples') ?? '3'),
+        samples = int.parse(_value(args, 'samples') ?? '10'),
         rounds = int.parse(_value(args, 'rounds') ?? '5'),
         sizes = (_value(args, 'sizes-mib') ?? '1,16,128')
             .split(',')
@@ -30,7 +34,12 @@ class HarnessOptions {
         diskFullPath = _value(args, 'disk-full-path'),
         approvedPath = _value(args, 'approve-disk-full-path'),
         maxAllocation =
-            int.parse(_value(args, 'max-allocation-mib') ?? '256') * mib {
+            int.parse(_value(args, 'max-allocation-mib') ?? '256') * mib,
+        profiling = (_value(args, 'profiling') ?? 'true') == 'true',
+        blockMiB = int.tryParse(_value(args, 'block-mib') ?? ''),
+        baselineBlockMiB = int.parse(_value(args, 'baseline-block-mib') ?? '4'),
+        candidateBlockMiB =
+            int.parse(_value(args, 'candidate-block-mib') ?? '16') {
     const values = {
       'suite',
       'seed',
@@ -40,7 +49,11 @@ class HarnessOptions {
       'output',
       'disk-full-path',
       'approve-disk-full-path',
-      'max-allocation-mib'
+      'max-allocation-mib',
+      'profiling',
+      'block-mib',
+      'baseline-block-mib',
+      'candidate-block-mib'
     };
     for (final arg in args) {
       if (arg == '--enable-disk-full') continue;
@@ -50,7 +63,7 @@ class HarnessOptions {
         throw ArgumentError('Unknown argument: $arg');
       }
     }
-    if (!{'all', 'reliability', 'benchmark', 'smoke'}.contains(suite) ||
+    if (!{'all', 'reliability', 'benchmark', 'smoke', 'ab'}.contains(suite) ||
         samples < 1 ||
         samples > 30 ||
         rounds < 1 ||
@@ -58,7 +71,14 @@ class HarnessOptions {
         sizes.isEmpty ||
         sizes.any((s) => !{1, 16, 128, 1024}.contains(s)) ||
         maxAllocation < 32 * mib ||
-        maxAllocation > 512 * mib) {
+        maxAllocation > 512 * mib ||
+        !{'true', 'false'}.contains(_value(args, 'profiling') ?? 'true') ||
+        (_value(args, 'block-mib') != null &&
+            !{1, 4, 8, 16, 32, 64}.contains(blockMiB)) ||
+        !{1, 4, 8, 16, 32, 64}.contains(baselineBlockMiB) ||
+        !{1, 4, 8, 16, 32, 64}.contains(candidateBlockMiB) ||
+        (suite == 'ab' &&
+            (samples < 10 || baselineBlockMiB == candidateBlockMiB))) {
       throw ArgumentError(
           'Invalid suite or bounded sample/size/allocation options');
     }
@@ -71,7 +91,13 @@ class HarnessOptions {
         'rounds': rounds,
         'sizesMiB': sizes,
         'diskFullOptIn': diskFull,
-        'maxAllocationBytes': maxAllocation
+        'maxAllocationBytes': maxAllocation,
+        'profiling': profiling,
+        'blockMiB': blockMiB,
+        'baselineBlockMiB': baselineBlockMiB,
+        'candidateBlockMiB': candidateBlockMiB,
+        'percentileMethod':
+            'nearest rank ceil(0.95*n)-1; p95 omitted below 20 samples'
       };
 }
 

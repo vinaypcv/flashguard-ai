@@ -1,0 +1,2470 @@
+{
+  "schemaVersion": 2,
+  "startedUtc": "2026-11-17T22:56:45.623239Z",
+  "completedUtc": "2026-11-17T23:02:55.152515Z",
+  "options": {
+    "suite": "reliability",
+    "seed": 5904128,
+    "samples": 10,
+    "rounds": 5,
+    "sizesMiB": [
+      1,
+      16,
+      128
+    ],
+    "diskFullOptIn": false,
+    "maxAllocationBytes": 268435456,
+    "profiling": true,
+    "blockMiB": 16,
+    "baselineBlockMiB": 4,
+    "candidateBlockMiB": 16,
+    "percentileMethod": "nearest rank ceil(0.95*n)-1; p95 omitted below 20 samples"
+  },
+  "environment": {
+    "os": "windows",
+    "osVersion": "\"Windows 11 Home\" 10.0 (Build 26300)",
+    "dart": "3.13.7 (stable) (Thu Oct 22 14:28:57 2026 -0700) on \"windows_x64\"",
+    "executable": "<WORKSPACE>\\.tools\\flutter\\bin\\cache\\dart-sdk\\bin\\dart.exe",
+    "processors": 8,
+    "volume": {
+      "mount": "C:\\",
+      "source": "114084607",
+      "fileSystem": "NTFS",
+      "label": "Windows",
+      "totalBytes": 998865104896,
+      "freeBytes": 674253512704
+    },
+    "nativeCapabilities": {
+      "atomicNoReplace": true,
+      "nativeFileSync": true,
+      "directorySync": false,
+      "description": "Windows NTFS driveType=3; local NTFS only; FlushFileBuffers available, directory sync unavailable"
+    },
+    "gitHead": "b8f2be76c7f54f45e0b799150102c5ce6f52f630",
+    "gitDirty": true,
+    "sourceSha256": {
+      "app/lib/core/integrity_engine.dart": "96a5019f5a6c7b1102da67c4720a7e1ba3e6ac9759bb80a5b9f1e9674ba7713a",
+      "app/lib/core/atomic_file_promoter.dart": "dfd7b748bbbf6fda713e84a083fc1f8cc8f5a3273f506c371e9320ff90321ba8",
+      "app/lib/core/transfer_diagnostics.dart": "4054b904ac367fb680f27e7f67b606d38dfeafcf0a8d3a22ea518f5ac063655f",
+      "app/tool/storage_reliability/ab.dart": "c047bc5cec65ee4ac86837b51d1f93d0db8be8d9e325828ebd7a3375ebf82cb0",
+      "app/tool/storage_reliability/controller.dart": "b3abdd6303b9a9d9c47176ba0d4243e24e92d207e70023b8b1ec6e355d94041c",
+      "app/tool/storage_reliability/disk_full.dart": "ac7c7bfefd7932ab9277b27b3bce7bd98abcb1ce5d52ad93d2fa813eb964365a",
+      "app/tool/storage_reliability/environment.dart": "b0903b2228723390baded25f4ea8a6f2a9d4fdd6ba6086fc208589b56722c1fe",
+      "app/tool/storage_reliability/model.dart": "b9e904f049ba0b162043a594e096928a2cad44c1236ee821f6c58db2422a5b12",
+      "app/tool/storage_reliability/process_worker.dart": "d8851d4a3656c2ceb9ad27c5428954df7044c7d403a7e0cd58a5c685d296d944",
+      "app/tool/storage_reliability/publication.dart": "2d793d34674edfa8ecccfbae7dede830a82d0b1fc1050c9d3efd19e0cc1f6eac",
+      "app/tool/storage_reliability/worker.dart": "5d65bf3239798c46810cabdada10caf1882025058ecaf4ce6b41f9dfd59e127d"
+    }
+  },
+  "summary": {
+    "passed": 12,
+    "failed": 0,
+    "skipped": 1
+  },
+  "workspace": "<RUN_WORKSPACE>",
+  "workspaceRetained": false,
+  "records": [
+    {
+      "kind": "processKill",
+      "id": "blockFlushed",
+      "seed": 5904128,
+      "status": "passed",
+      "failureStage": "blockFlushed",
+      "blockBytes": 16777216,
+      "forcedExitCode": -1,
+      "checkpointReady": {
+        "type": "ready",
+        "stage": "blockFlushed",
+        "offset": 16777216,
+        "metrics": {
+          "enabled": true,
+          "totalMicros": 0,
+          "blockBytes": 16777216,
+          "checkpointCount": 0,
+          "resumedBytes": 0,
+          "nativeFileSyncCount": 0,
+          "directorySyncCount": 0,
+          "phases": {
+            "setup": {
+              "micros": 26327,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "sourceHash": {
+              "micros": 2669395,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "checkpointValidation": {
+              "micros": 3490,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "sourceRead": {
+              "micros": 247263,
+              "operations": 1,
+              "bytesRead": 16777216,
+              "bytesWritten": 0
+            },
+            "blockWrite": {
+              "micros": 16796,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 16777216
+            },
+            "dataFlush": {
+              "micros": 393319,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            }
+          },
+          "accountedMicros": 3356590,
+          "unattributedMicros": -3356590,
+          "sourceHashMicros": 2669395,
+          "recoveryValidationMicros": 3490,
+          "copyCheckpointMicros": 0,
+          "verificationMicros": 0,
+          "finalVerificationMicros": 0,
+          "copyBytesWritten": 16777216,
+          "checkpointMetadataBytesWritten": 0
+        },
+        "state": "copying",
+        "history": [
+          "pending -> hashingSource",
+          "hashingSource -> copying"
+        ],
+        "pid": 8956
+      },
+      "snapshot": {
+        "partExists": true,
+        "partBytes": 16777216,
+        "finalExists": false,
+        "checkpointExists": false,
+        "checkpointOffset": 0
+      },
+      "recoveryOutcome": "verified",
+      "fixture": {
+        "sizeBytes": 33554432,
+        "sha256": "b804d8d2651753914866fd1bf71ccce151a907471c38a1542638a5161109ea9c",
+        "fixtureGenerationMicros": 3113136
+      },
+      "recovery": {
+        "type": "result",
+        "status": "passed",
+        "operation": "engine",
+        "state": "committed",
+        "sha256": "b804d8d2651753914866fd1bf71ccce151a907471c38a1542638a5161109ea9c",
+        "destinationFileName": "source.bin",
+        "byteSize": 33554432,
+        "byteForByteVerified": true,
+        "resumedBytes": 0,
+        "transferredBytes": 33554432,
+        "reusedExistingCopy": false,
+        "endToEndMicros": 56379581,
+        "endToEndMiBs": 0.5675813731215916,
+        "copyCheckpointMiBs": 11.202806863259589,
+        "metrics": {
+          "enabled": true,
+          "totalMicros": 56375181,
+          "blockBytes": 16777216,
+          "checkpointCount": 2,
+          "resumedBytes": 0,
+          "nativeFileSyncCount": 3,
+          "directorySyncCount": 0,
+          "phases": {
+            "setup": {
+              "micros": 24189,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "sourceHash": {
+              "micros": 7500270,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "checkpointValidation": {
+              "micros": 6462,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "sourceRead": {
+              "micros": 464582,
+              "operations": 2,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "blockWrite": {
+              "micros": 26564,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 33554432
+            },
+            "dataFlush": {
+              "micros": 1261030,
+              "operations": 3,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "blockHash": {
+              "micros": 482718,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "checkpointSerialization": {
+              "micros": 3352,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "checkpointPersistence": {
+              "micros": 614255,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 979
+            },
+            "tempVerification": {
+              "micros": 433213,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "sourceConsistency": {
+              "micros": 16874602,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "mediaInspection": {
+              "micros": 4754,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "durability": {
+              "micros": 252034,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "promotion": {
+              "micros": 23481,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "finalVerification": {
+              "micros": 28391843,
+              "operations": 1,
+              "bytesRead": 67108864,
+              "bytesWritten": 0
+            },
+            "cleanup": {
+              "micros": 2696,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            }
+          },
+          "accountedMicros": 56366045,
+          "unattributedMicros": 9136,
+          "sourceHashMicros": 7500270,
+          "recoveryValidationMicros": 6462,
+          "copyCheckpointMicros": 2856427,
+          "verificationMicros": 17313655,
+          "finalVerificationMicros": 28391843,
+          "copyBytesWritten": 33554432,
+          "checkpointMetadataBytesWritten": 979
+        },
+        "profilingEnabled": true,
+        "checkpointBlockBytes": 16777216,
+        "logicalWriteAmplification": 1.0000291764736176,
+        "physicalWriteAmplification": null,
+        "processCpuMicros": 5156250,
+        "rssBeforeBytes": 211292160,
+        "rssAfterBytes": 229150720,
+        "maxRssBytes": 283906048,
+        "history": [
+          "pending -> hashingSource",
+          "hashingSource -> copying",
+          "copying -> checkpointed",
+          "checkpointed -> copying",
+          "copying -> checkpointed",
+          "checkpointed -> verifying",
+          "verifying -> promoting",
+          "promoting -> committed"
+        ],
+        "pid": 25864,
+        "exitCode": 0,
+        "controllerLatencyMicros": 57135359
+      },
+      "sourcePreserved": true,
+      "workspaceLockReleasedByProcessExit": true
+    },
+    {
+      "kind": "processKill",
+      "id": "checkpointSaved",
+      "seed": 5904128,
+      "status": "passed",
+      "failureStage": "checkpointSaved",
+      "blockBytes": 16777216,
+      "forcedExitCode": -1,
+      "checkpointReady": {
+        "type": "ready",
+        "stage": "checkpointSaved",
+        "offset": 16777216,
+        "metrics": {
+          "enabled": true,
+          "totalMicros": 0,
+          "blockBytes": 16777216,
+          "checkpointCount": 1,
+          "resumedBytes": 0,
+          "nativeFileSyncCount": 0,
+          "directorySyncCount": 0,
+          "phases": {
+            "setup": {
+              "micros": 183573,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "sourceHash": {
+              "micros": 31734882,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "checkpointValidation": {
+              "micros": 142311,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "sourceRead": {
+              "micros": 721920,
+              "operations": 1,
+              "bytesRead": 16777216,
+              "bytesWritten": 0
+            },
+            "blockWrite": {
+              "micros": 20169,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 16777216
+            },
+            "dataFlush": {
+              "micros": 885123,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "blockHash": {
+              "micros": 238217,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "checkpointSerialization": {
+              "micros": 3159,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "checkpointPersistence": {
+              "micros": 721442,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 459
+            }
+          },
+          "accountedMicros": 34650796,
+          "unattributedMicros": -34650796,
+          "sourceHashMicros": 31734882,
+          "recoveryValidationMicros": 142311,
+          "copyCheckpointMicros": 0,
+          "verificationMicros": 0,
+          "finalVerificationMicros": 0,
+          "copyBytesWritten": 16777216,
+          "checkpointMetadataBytesWritten": 459
+        },
+        "state": "checkpointed",
+        "history": [
+          "pending -> hashingSource",
+          "hashingSource -> copying",
+          "copying -> checkpointed"
+        ],
+        "pid": 20404
+      },
+      "snapshot": {
+        "partExists": true,
+        "partBytes": 16777216,
+        "finalExists": false,
+        "checkpointExists": true,
+        "checkpointOffset": 16777216,
+        "checkpointMetadataSha256Valid": true
+      },
+      "recoveryOutcome": "verified",
+      "fixture": {
+        "sizeBytes": 33554432,
+        "sha256": "b804d8d2651753914866fd1bf71ccce151a907471c38a1542638a5161109ea9c",
+        "fixtureGenerationMicros": 5326455
+      },
+      "recovery": {
+        "type": "result",
+        "status": "passed",
+        "operation": "engine",
+        "state": "committed",
+        "sha256": "b804d8d2651753914866fd1bf71ccce151a907471c38a1542638a5161109ea9c",
+        "destinationFileName": "source.bin",
+        "byteSize": 33554432,
+        "byteForByteVerified": true,
+        "resumedBytes": 16777216,
+        "transferredBytes": 16777216,
+        "reusedExistingCopy": false,
+        "endToEndMicros": 20843769,
+        "endToEndMiBs": 1.5352309843771534,
+        "copyCheckpointMiBs": 6.794000388107272,
+        "metrics": {
+          "enabled": true,
+          "totalMicros": 20838967,
+          "blockBytes": 16777216,
+          "checkpointCount": 1,
+          "resumedBytes": 16777216,
+          "nativeFileSyncCount": 3,
+          "directorySyncCount": 0,
+          "phases": {
+            "setup": {
+              "micros": 27072,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "sourceHash": {
+              "micros": 7391898,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "checkpointValidation": {
+              "micros": 2012515,
+              "operations": 1,
+              "bytesRead": 33554891,
+              "bytesWritten": 0
+            },
+            "sourceRead": {
+              "micros": 183081,
+              "operations": 1,
+              "bytesRead": 16777216,
+              "bytesWritten": 0
+            },
+            "blockWrite": {
+              "micros": 121891,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 16777216
+            },
+            "dataFlush": {
+              "micros": 870126,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "blockHash": {
+              "micros": 253083,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "checkpointSerialization": {
+              "micros": 1252,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "checkpointPersistence": {
+              "micros": 920016,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 526
+            },
+            "tempVerification": {
+              "micros": 7166828,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "sourceConsistency": {
+              "micros": 473104,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "mediaInspection": {
+              "micros": 970,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "durability": {
+              "micros": 395973,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "promotion": {
+              "micros": 10590,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "finalVerification": {
+              "micros": 997348,
+              "operations": 1,
+              "bytesRead": 67108864,
+              "bytesWritten": 0
+            },
+            "cleanup": {
+              "micros": 3093,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            }
+          },
+          "accountedMicros": 20828840,
+          "unattributedMicros": 10127,
+          "sourceHashMicros": 7391898,
+          "recoveryValidationMicros": 2012515,
+          "copyCheckpointMicros": 2355019,
+          "verificationMicros": 7641143,
+          "finalVerificationMicros": 997348,
+          "copyBytesWritten": 16777216,
+          "checkpointMetadataBytesWritten": 526
+        },
+        "profilingEnabled": true,
+        "checkpointBlockBytes": 16777216,
+        "logicalWriteAmplification": 0.5000156760215759,
+        "physicalWriteAmplification": null,
+        "processCpuMicros": 4078125,
+        "rssBeforeBytes": 211357696,
+        "rssAfterBytes": 263585792,
+        "maxRssBytes": 283971584,
+        "history": [
+          "pending -> hashingSource",
+          "hashingSource -> copying",
+          "copying -> checkpointed",
+          "checkpointed -> verifying",
+          "verifying -> promoting",
+          "promoting -> committed"
+        ],
+        "pid": 21468,
+        "exitCode": 0,
+        "controllerLatencyMicros": 21864625
+      },
+      "sourcePreserved": true,
+      "workspaceLockReleasedByProcessExit": true
+    },
+    {
+      "kind": "processKill",
+      "id": "verificationBlockRead",
+      "seed": 5904128,
+      "status": "passed",
+      "failureStage": "verificationBlockRead",
+      "blockBytes": 16777216,
+      "forcedExitCode": -1,
+      "checkpointReady": {
+        "type": "ready",
+        "stage": "verificationBlockRead",
+        "offset": 65536,
+        "metrics": {
+          "enabled": true,
+          "totalMicros": 0,
+          "blockBytes": 16777216,
+          "checkpointCount": 2,
+          "resumedBytes": 0,
+          "nativeFileSyncCount": 0,
+          "directorySyncCount": 0,
+          "phases": {
+            "setup": {
+              "micros": 113967,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "sourceHash": {
+              "micros": 532880,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "checkpointValidation": {
+              "micros": 71590,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "sourceRead": {
+              "micros": 29691,
+              "operations": 2,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "blockWrite": {
+              "micros": 57358,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 33554432
+            },
+            "dataFlush": {
+              "micros": 2561718,
+              "operations": 3,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "blockHash": {
+              "micros": 510291,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "checkpointSerialization": {
+              "micros": 3824,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "checkpointPersistence": {
+              "micros": 684663,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 997
+            },
+            "tempVerification": {
+              "micros": 0,
+              "operations": 0,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            }
+          },
+          "accountedMicros": 4565982,
+          "unattributedMicros": -4565982,
+          "sourceHashMicros": 532880,
+          "recoveryValidationMicros": 71590,
+          "copyCheckpointMicros": 3852503,
+          "verificationMicros": 0,
+          "finalVerificationMicros": 0,
+          "copyBytesWritten": 33554432,
+          "checkpointMetadataBytesWritten": 997
+        },
+        "state": "verifying",
+        "history": [
+          "pending -> hashingSource",
+          "hashingSource -> copying",
+          "copying -> checkpointed",
+          "checkpointed -> copying",
+          "copying -> checkpointed",
+          "checkpointed -> verifying"
+        ],
+        "pid": 16856
+      },
+      "snapshot": {
+        "partExists": true,
+        "partBytes": 33554432,
+        "finalExists": false,
+        "checkpointExists": true,
+        "checkpointOffset": 33554432,
+        "checkpointMetadataSha256Valid": true
+      },
+      "recoveryOutcome": "verified",
+      "fixture": {
+        "sizeBytes": 33554432,
+        "sha256": "b804d8d2651753914866fd1bf71ccce151a907471c38a1542638a5161109ea9c",
+        "fixtureGenerationMicros": 2767582
+      },
+      "recovery": {
+        "type": "result",
+        "status": "passed",
+        "operation": "engine",
+        "state": "committed",
+        "sha256": "b804d8d2651753914866fd1bf71ccce151a907471c38a1542638a5161109ea9c",
+        "destinationFileName": "source.bin",
+        "byteSize": 33554432,
+        "byteForByteVerified": true,
+        "resumedBytes": 33554432,
+        "transferredBytes": 0,
+        "reusedExistingCopy": false,
+        "endToEndMicros": 4007748,
+        "endToEndMiBs": 7.9845339577238885,
+        "copyCheckpointMiBs": 0.0,
+        "metrics": {
+          "enabled": true,
+          "totalMicros": 4002956,
+          "blockBytes": 16777216,
+          "checkpointCount": 0,
+          "resumedBytes": 33554432,
+          "nativeFileSyncCount": 3,
+          "directorySyncCount": 0,
+          "phases": {
+            "setup": {
+              "micros": 22561,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "sourceHash": {
+              "micros": 521163,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "checkpointValidation": {
+              "micros": 985423,
+              "operations": 1,
+              "bytesRead": 67109861,
+              "bytesWritten": 0
+            },
+            "dataFlush": {
+              "micros": 243872,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "tempVerification": {
+              "micros": 466266,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "sourceConsistency": {
+              "micros": 453411,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "mediaInspection": {
+              "micros": 885,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "durability": {
+              "micros": 325928,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "promotion": {
+              "micros": 20165,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "finalVerification": {
+              "micros": 954969,
+              "operations": 1,
+              "bytesRead": 67108864,
+              "bytesWritten": 0
+            },
+            "cleanup": {
+              "micros": 2982,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            }
+          },
+          "accountedMicros": 3997625,
+          "unattributedMicros": 5331,
+          "sourceHashMicros": 521163,
+          "recoveryValidationMicros": 985423,
+          "copyCheckpointMicros": 244646,
+          "verificationMicros": 920858,
+          "finalVerificationMicros": 954969,
+          "copyBytesWritten": 0,
+          "checkpointMetadataBytesWritten": 0
+        },
+        "profilingEnabled": true,
+        "checkpointBlockBytes": 16777216,
+        "logicalWriteAmplification": 0.0,
+        "physicalWriteAmplification": null,
+        "processCpuMicros": 3703125,
+        "rssBeforeBytes": 211406848,
+        "rssAfterBytes": 247865344,
+        "maxRssBytes": 284209152,
+        "history": [
+          "pending -> hashingSource",
+          "hashingSource -> copying",
+          "copying -> verifying",
+          "verifying -> promoting",
+          "promoting -> committed"
+        ],
+        "pid": 22020,
+        "exitCode": 0,
+        "controllerLatencyMicros": 4683595
+      },
+      "sourcePreserved": true,
+      "workspaceLockReleasedByProcessExit": true
+    },
+    {
+      "kind": "processKill",
+      "id": "promotionStarted",
+      "seed": 5904128,
+      "status": "passed",
+      "failureStage": "promotionStarted",
+      "blockBytes": 16777216,
+      "forcedExitCode": -1,
+      "checkpointReady": {
+        "type": "ready",
+        "stage": "promotionStarted",
+        "offset": 33554432,
+        "metrics": {
+          "enabled": true,
+          "totalMicros": 0,
+          "blockBytes": 16777216,
+          "checkpointCount": 2,
+          "resumedBytes": 0,
+          "nativeFileSyncCount": 3,
+          "directorySyncCount": 0,
+          "phases": {
+            "setup": {
+              "micros": 20901,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "sourceHash": {
+              "micros": 485817,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "checkpointValidation": {
+              "micros": 2892,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "sourceRead": {
+              "micros": 22707,
+              "operations": 2,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "blockWrite": {
+              "micros": 22736,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 33554432
+            },
+            "dataFlush": {
+              "micros": 2374824,
+              "operations": 3,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "blockHash": {
+              "micros": 456669,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "checkpointSerialization": {
+              "micros": 3779,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "checkpointPersistence": {
+              "micros": 2220814,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 987
+            },
+            "tempVerification": {
+              "micros": 920809,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "sourceConsistency": {
+              "micros": 619777,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "mediaInspection": {
+              "micros": 1627,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "durability": {
+              "micros": 1089314,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            }
+          },
+          "accountedMicros": 8242666,
+          "unattributedMicros": -8242666,
+          "sourceHashMicros": 485817,
+          "recoveryValidationMicros": 2892,
+          "copyCheckpointMicros": 5105983,
+          "verificationMicros": 1542519,
+          "finalVerificationMicros": 0,
+          "copyBytesWritten": 33554432,
+          "checkpointMetadataBytesWritten": 987
+        },
+        "state": "promoting",
+        "history": [
+          "pending -> hashingSource",
+          "hashingSource -> copying",
+          "copying -> checkpointed",
+          "checkpointed -> copying",
+          "copying -> checkpointed",
+          "checkpointed -> verifying",
+          "verifying -> promoting"
+        ],
+        "pid": 16008
+      },
+      "snapshot": {
+        "partExists": true,
+        "partBytes": 33554432,
+        "finalExists": false,
+        "checkpointExists": true,
+        "checkpointOffset": 33554432,
+        "checkpointMetadataSha256Valid": true
+      },
+      "recoveryOutcome": "verified",
+      "fixture": {
+        "sizeBytes": 33554432,
+        "sha256": "b804d8d2651753914866fd1bf71ccce151a907471c38a1542638a5161109ea9c",
+        "fixtureGenerationMicros": 5359718
+      },
+      "recovery": {
+        "type": "result",
+        "status": "passed",
+        "operation": "engine",
+        "state": "committed",
+        "sha256": "b804d8d2651753914866fd1bf71ccce151a907471c38a1542638a5161109ea9c",
+        "destinationFileName": "source.bin",
+        "byteSize": 33554432,
+        "byteForByteVerified": true,
+        "resumedBytes": 33554432,
+        "transferredBytes": 0,
+        "reusedExistingCopy": false,
+        "endToEndMicros": 4553699,
+        "endToEndMiBs": 7.027254107045723,
+        "copyCheckpointMiBs": 0.0,
+        "metrics": {
+          "enabled": true,
+          "totalMicros": 4549008,
+          "blockBytes": 16777216,
+          "checkpointCount": 0,
+          "resumedBytes": 33554432,
+          "nativeFileSyncCount": 3,
+          "directorySyncCount": 0,
+          "phases": {
+            "setup": {
+              "micros": 23016,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "sourceHash": {
+              "micros": 494719,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "checkpointValidation": {
+              "micros": 1249616,
+              "operations": 1,
+              "bytesRead": 67109851,
+              "bytesWritten": 0
+            },
+            "dataFlush": {
+              "micros": 218151,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "tempVerification": {
+              "micros": 519293,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "sourceConsistency": {
+              "micros": 532398,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "mediaInspection": {
+              "micros": 1066,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "durability": {
+              "micros": 611739,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "promotion": {
+              "micros": 21994,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "finalVerification": {
+              "micros": 869224,
+              "operations": 1,
+              "bytesRead": 67108864,
+              "bytesWritten": 0
+            },
+            "cleanup": {
+              "micros": 2787,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            }
+          },
+          "accountedMicros": 4544003,
+          "unattributedMicros": 5005,
+          "sourceHashMicros": 494719,
+          "recoveryValidationMicros": 1249616,
+          "copyCheckpointMicros": 218649,
+          "verificationMicros": 1053002,
+          "finalVerificationMicros": 869224,
+          "copyBytesWritten": 0,
+          "checkpointMetadataBytesWritten": 0
+        },
+        "profilingEnabled": true,
+        "checkpointBlockBytes": 16777216,
+        "logicalWriteAmplification": 0.0,
+        "physicalWriteAmplification": null,
+        "processCpuMicros": 4000000,
+        "rssBeforeBytes": 211357696,
+        "rssAfterBytes": 247021568,
+        "maxRssBytes": 284631040,
+        "history": [
+          "pending -> hashingSource",
+          "hashingSource -> copying",
+          "copying -> verifying",
+          "verifying -> promoting",
+          "promoting -> committed"
+        ],
+        "pid": 200,
+        "exitCode": 0,
+        "controllerLatencyMicros": 5203490
+      },
+      "sourcePreserved": true,
+      "workspaceLockReleasedByProcessExit": true
+    },
+    {
+      "kind": "processKill",
+      "id": "promoted",
+      "seed": 5904128,
+      "status": "passed",
+      "failureStage": "promoted",
+      "blockBytes": 16777216,
+      "forcedExitCode": -1,
+      "checkpointReady": {
+        "type": "ready",
+        "stage": "promoted",
+        "offset": 33554432,
+        "metrics": {
+          "enabled": true,
+          "totalMicros": 0,
+          "blockBytes": 16777216,
+          "checkpointCount": 2,
+          "resumedBytes": 0,
+          "nativeFileSyncCount": 3,
+          "directorySyncCount": 0,
+          "phases": {
+            "setup": {
+              "micros": 26729,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "sourceHash": {
+              "micros": 2158732,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "checkpointValidation": {
+              "micros": 3009,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "sourceRead": {
+              "micros": 91620,
+              "operations": 2,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "blockWrite": {
+              "micros": 131873,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 33554432
+            },
+            "dataFlush": {
+              "micros": 3408498,
+              "operations": 3,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "blockHash": {
+              "micros": 880646,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "checkpointSerialization": {
+              "micros": 16634,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "checkpointPersistence": {
+              "micros": 1526677,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 971
+            },
+            "tempVerification": {
+              "micros": 615024,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "sourceConsistency": {
+              "micros": 26328083,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "mediaInspection": {
+              "micros": 1041,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "durability": {
+              "micros": 267898,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "promotion": {
+              "micros": 20661,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            }
+          },
+          "accountedMicros": 35477125,
+          "unattributedMicros": -35477125,
+          "sourceHashMicros": 2158732,
+          "recoveryValidationMicros": 3009,
+          "copyCheckpointMicros": 6062195,
+          "verificationMicros": 26944469,
+          "finalVerificationMicros": 0,
+          "copyBytesWritten": 33554432,
+          "checkpointMetadataBytesWritten": 971
+        },
+        "state": "promoting",
+        "history": [
+          "pending -> hashingSource",
+          "hashingSource -> copying",
+          "copying -> checkpointed",
+          "checkpointed -> copying",
+          "copying -> checkpointed",
+          "checkpointed -> verifying",
+          "verifying -> promoting"
+        ],
+        "pid": 26616
+      },
+      "snapshot": {
+        "partExists": false,
+        "partBytes": 0,
+        "finalExists": true,
+        "checkpointExists": true,
+        "checkpointOffset": 33554432,
+        "checkpointMetadataSha256Valid": true
+      },
+      "recoveryOutcome": "verified",
+      "fixture": {
+        "sizeBytes": 33554432,
+        "sha256": "b804d8d2651753914866fd1bf71ccce151a907471c38a1542638a5161109ea9c",
+        "fixtureGenerationMicros": 2887416
+      },
+      "recovery": {
+        "type": "result",
+        "status": "passed",
+        "operation": "engine",
+        "state": "committed",
+        "sha256": "b804d8d2651753914866fd1bf71ccce151a907471c38a1542638a5161109ea9c",
+        "destinationFileName": "source.bin",
+        "byteSize": 33554432,
+        "byteForByteVerified": true,
+        "resumedBytes": 0,
+        "transferredBytes": 0,
+        "reusedExistingCopy": true,
+        "endToEndMicros": 1608664,
+        "endToEndMiBs": 19.892283286006275,
+        "copyCheckpointMiBs": null,
+        "metrics": {
+          "enabled": true,
+          "totalMicros": 1604043,
+          "blockBytes": 16777216,
+          "checkpointCount": 0,
+          "resumedBytes": 0,
+          "nativeFileSyncCount": 0,
+          "directorySyncCount": 0,
+          "phases": {
+            "setup": {
+              "micros": 12403,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "sourceHash": {
+              "micros": 547741,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "existingCopyVerification": {
+              "micros": 1041799,
+              "operations": 1,
+              "bytesRead": 67108864,
+              "bytesWritten": 0
+            },
+            "cleanup": {
+              "micros": 166,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            }
+          },
+          "accountedMicros": 1602109,
+          "unattributedMicros": 1934,
+          "sourceHashMicros": 547741,
+          "recoveryValidationMicros": 0,
+          "copyCheckpointMicros": 0,
+          "verificationMicros": 0,
+          "finalVerificationMicros": 0,
+          "copyBytesWritten": 0,
+          "checkpointMetadataBytesWritten": 0
+        },
+        "profilingEnabled": true,
+        "checkpointBlockBytes": 16777216,
+        "logicalWriteAmplification": 0.0,
+        "physicalWriteAmplification": null,
+        "processCpuMicros": 1765625,
+        "rssBeforeBytes": 210817024,
+        "rssAfterBytes": 211976192,
+        "maxRssBytes": 283557888,
+        "history": [
+          "pending -> hashingSource",
+          "hashingSource -> verifying",
+          "verifying -> committed"
+        ],
+        "pid": 21216,
+        "exitCode": 0,
+        "controllerLatencyMicros": 6595202
+      },
+      "sourcePreserved": true,
+      "workspaceLockReleasedByProcessExit": true
+    },
+    {
+      "kind": "nativeProcessRace",
+      "id": "native-race-0",
+      "seed": 5904128,
+      "status": "passed",
+      "round": 0,
+      "scenarioSeed": 5904128,
+      "existingDestination": false,
+      "gates": [
+        {
+          "type": "ready",
+          "stage": "nativePromotion",
+          "offset": 0,
+          "metrics": {
+            "enabled": true,
+            "totalMicros": 0,
+            "blockBytes": 0,
+            "checkpointCount": 0,
+            "resumedBytes": 0,
+            "nativeFileSyncCount": 0,
+            "directorySyncCount": 0,
+            "phases": {},
+            "accountedMicros": 0,
+            "unattributedMicros": 0,
+            "sourceHashMicros": 0,
+            "recoveryValidationMicros": 0,
+            "copyCheckpointMicros": 0,
+            "verificationMicros": 0,
+            "finalVerificationMicros": 0,
+            "copyBytesWritten": 0,
+            "checkpointMetadataBytesWritten": 0
+          },
+          "state": "pending",
+          "history": [],
+          "pid": 25456
+        },
+        {
+          "type": "ready",
+          "stage": "nativePromotion",
+          "offset": 0,
+          "metrics": {
+            "enabled": true,
+            "totalMicros": 0,
+            "blockBytes": 0,
+            "checkpointCount": 0,
+            "resumedBytes": 0,
+            "nativeFileSyncCount": 0,
+            "directorySyncCount": 0,
+            "phases": {},
+            "accountedMicros": 0,
+            "unattributedMicros": 0,
+            "sourceHashMicros": 0,
+            "recoveryValidationMicros": 0,
+            "copyCheckpointMicros": 0,
+            "verificationMicros": 0,
+            "finalVerificationMicros": 0,
+            "copyBytesWritten": 0,
+            "checkpointMetadataBytesWritten": 0
+          },
+          "state": "pending",
+          "history": [],
+          "pid": 27616
+        }
+      ],
+      "writers": [
+        {
+          "type": "result",
+          "status": "passed",
+          "operation": "native",
+          "sha256": "c3ff458ac58e8b911f6052c0f2441ec8cd1b9529cedae4c26f8411ad04c2e241",
+          "destinationFileName": "winner.bin",
+          "endToEndMicros": 77368,
+          "pid": 25456,
+          "exitCode": 0,
+          "controllerLatencyMicros": 4894674
+        },
+        {
+          "type": "result",
+          "status": "failed",
+          "error": "FileSystemException: Native promotion failed and destination is occupied, path = '<RUN_WORKSPACE>\\race_0\\winner.bin' (OS Error: Native promotion failed and destination is occupied, errno = 183)",
+          "errorType": "PromotionException",
+          "promotionFailure": "conflict",
+          "nativeError": 183,
+          "state": "pending",
+          "metrics": {
+            "enabled": true,
+            "totalMicros": 0,
+            "blockBytes": 0,
+            "checkpointCount": 0,
+            "resumedBytes": 0,
+            "nativeFileSyncCount": 0,
+            "directorySyncCount": 0,
+            "phases": {},
+            "accountedMicros": 0,
+            "unattributedMicros": 0,
+            "sourceHashMicros": 0,
+            "recoveryValidationMicros": 0,
+            "copyCheckpointMicros": 0,
+            "verificationMicros": 0,
+            "finalVerificationMicros": 0,
+            "copyBytesWritten": 0,
+            "checkpointMetadataBytesWritten": 0
+          },
+          "history": [],
+          "stack": "#0      _windowsMove.<anonymous closure> (package:flashguard_ai/core/atomic_file_promoter.dart:264:9)\n#1      using (package:ffi/src/arena.dart:127:31)\n#2      _windowsMove (package:flashguard_ai/core/atomic_file_promoter.dart:244:3)\n#3      NativeAtomicFilePromoter.promoteNoReplace.<anonymous closure> (package:flashguard_ai/core/atomic_file_promoter.dart:121:9)\n#4      _RemoteRunner._run (dart:isolate:1234:47)\n#5      _RemoteRunner._remoteExecute (dart:isolate:1228:12)\n#6      _delayEntrypointInvocation.<anonymous closure> (dart:isolate-patch/isolate_patch.dart:316:17)\n#7      _RawReceivePort._handleMessage (dart:isolate-patch/isolate_patch.dart:192:12)\n",
+          "pid": 27616,
+          "exitCode": 20,
+          "controllerLatencyMicros": 4886458
+        }
+      ],
+      "finalSha256": "c3ff458ac58e8b911f6052c0f2441ec8cd1b9529cedae4c26f8411ad04c2e241",
+      "atomicNoReplaceDemonstrated": true
+    },
+    {
+      "kind": "nativeProcessRace",
+      "id": "native-race-1",
+      "seed": 5904128,
+      "status": "passed",
+      "round": 1,
+      "scenarioSeed": 5904129,
+      "existingDestination": false,
+      "gates": [
+        {
+          "type": "ready",
+          "stage": "nativePromotion",
+          "offset": 0,
+          "metrics": {
+            "enabled": true,
+            "totalMicros": 0,
+            "blockBytes": 0,
+            "checkpointCount": 0,
+            "resumedBytes": 0,
+            "nativeFileSyncCount": 0,
+            "directorySyncCount": 0,
+            "phases": {},
+            "accountedMicros": 0,
+            "unattributedMicros": 0,
+            "sourceHashMicros": 0,
+            "recoveryValidationMicros": 0,
+            "copyCheckpointMicros": 0,
+            "verificationMicros": 0,
+            "finalVerificationMicros": 0,
+            "copyBytesWritten": 0,
+            "checkpointMetadataBytesWritten": 0
+          },
+          "state": "pending",
+          "history": [],
+          "pid": 19688
+        },
+        {
+          "type": "ready",
+          "stage": "nativePromotion",
+          "offset": 0,
+          "metrics": {
+            "enabled": true,
+            "totalMicros": 0,
+            "blockBytes": 0,
+            "checkpointCount": 0,
+            "resumedBytes": 0,
+            "nativeFileSyncCount": 0,
+            "directorySyncCount": 0,
+            "phases": {},
+            "accountedMicros": 0,
+            "unattributedMicros": 0,
+            "sourceHashMicros": 0,
+            "recoveryValidationMicros": 0,
+            "copyCheckpointMicros": 0,
+            "verificationMicros": 0,
+            "finalVerificationMicros": 0,
+            "copyBytesWritten": 0,
+            "checkpointMetadataBytesWritten": 0
+          },
+          "state": "pending",
+          "history": [],
+          "pid": 25568
+        }
+      ],
+      "writers": [
+        {
+          "type": "result",
+          "status": "failed",
+          "error": "FileSystemException: Native promotion failed and destination is occupied, path = '<RUN_WORKSPACE>\\race_1\\winner.bin' (OS Error: Native promotion failed and destination is occupied, errno = 183)",
+          "errorType": "PromotionException",
+          "promotionFailure": "conflict",
+          "nativeError": 183,
+          "state": "pending",
+          "metrics": {
+            "enabled": true,
+            "totalMicros": 0,
+            "blockBytes": 0,
+            "checkpointCount": 0,
+            "resumedBytes": 0,
+            "nativeFileSyncCount": 0,
+            "directorySyncCount": 0,
+            "phases": {},
+            "accountedMicros": 0,
+            "unattributedMicros": 0,
+            "sourceHashMicros": 0,
+            "recoveryValidationMicros": 0,
+            "copyCheckpointMicros": 0,
+            "verificationMicros": 0,
+            "finalVerificationMicros": 0,
+            "copyBytesWritten": 0,
+            "checkpointMetadataBytesWritten": 0
+          },
+          "history": [],
+          "stack": "#0      _windowsMove.<anonymous closure> (package:flashguard_ai/core/atomic_file_promoter.dart:264:9)\n#1      using (package:ffi/src/arena.dart:127:31)\n#2      _windowsMove (package:flashguard_ai/core/atomic_file_promoter.dart:244:3)\n#3      NativeAtomicFilePromoter.promoteNoReplace.<anonymous closure> (package:flashguard_ai/core/atomic_file_promoter.dart:121:9)\n#4      _RemoteRunner._run (dart:isolate:1234:47)\n#5      _RemoteRunner._remoteExecute (dart:isolate:1228:12)\n#6      _delayEntrypointInvocation.<anonymous closure> (dart:isolate-patch/isolate_patch.dart:316:17)\n#7      _RawReceivePort._handleMessage (dart:isolate-patch/isolate_patch.dart:192:12)\n",
+          "pid": 19688,
+          "exitCode": 20,
+          "controllerLatencyMicros": 9686397
+        },
+        {
+          "type": "result",
+          "status": "passed",
+          "operation": "native",
+          "sha256": "48d65e66a08c553200b8e39a8616407e14e3c441b5ba3efc772af46239ab31c8",
+          "destinationFileName": "winner.bin",
+          "endToEndMicros": 452930,
+          "pid": 25568,
+          "exitCode": 0,
+          "controllerLatencyMicros": 9681845
+        }
+      ],
+      "finalSha256": "48d65e66a08c553200b8e39a8616407e14e3c441b5ba3efc772af46239ab31c8",
+      "atomicNoReplaceDemonstrated": true
+    },
+    {
+      "kind": "nativeProcessRace",
+      "id": "native-race-2",
+      "seed": 5904128,
+      "status": "passed",
+      "round": 2,
+      "scenarioSeed": 5904130,
+      "existingDestination": false,
+      "gates": [
+        {
+          "type": "ready",
+          "stage": "nativePromotion",
+          "offset": 0,
+          "metrics": {
+            "enabled": true,
+            "totalMicros": 0,
+            "blockBytes": 0,
+            "checkpointCount": 0,
+            "resumedBytes": 0,
+            "nativeFileSyncCount": 0,
+            "directorySyncCount": 0,
+            "phases": {},
+            "accountedMicros": 0,
+            "unattributedMicros": 0,
+            "sourceHashMicros": 0,
+            "recoveryValidationMicros": 0,
+            "copyCheckpointMicros": 0,
+            "verificationMicros": 0,
+            "finalVerificationMicros": 0,
+            "copyBytesWritten": 0,
+            "checkpointMetadataBytesWritten": 0
+          },
+          "state": "pending",
+          "history": [],
+          "pid": 26300
+        },
+        {
+          "type": "ready",
+          "stage": "nativePromotion",
+          "offset": 0,
+          "metrics": {
+            "enabled": true,
+            "totalMicros": 0,
+            "blockBytes": 0,
+            "checkpointCount": 0,
+            "resumedBytes": 0,
+            "nativeFileSyncCount": 0,
+            "directorySyncCount": 0,
+            "phases": {},
+            "accountedMicros": 0,
+            "unattributedMicros": 0,
+            "sourceHashMicros": 0,
+            "recoveryValidationMicros": 0,
+            "copyCheckpointMicros": 0,
+            "verificationMicros": 0,
+            "finalVerificationMicros": 0,
+            "copyBytesWritten": 0,
+            "checkpointMetadataBytesWritten": 0
+          },
+          "state": "pending",
+          "history": [],
+          "pid": 6012
+        }
+      ],
+      "writers": [
+        {
+          "type": "result",
+          "status": "passed",
+          "operation": "native",
+          "sha256": "48d65e66a08c553200b8e39a8616407e14e3c441b5ba3efc772af46239ab31c8",
+          "destinationFileName": "winner.bin",
+          "endToEndMicros": 846547,
+          "pid": 26300,
+          "exitCode": 0,
+          "controllerLatencyMicros": 21888064
+        },
+        {
+          "type": "result",
+          "status": "failed",
+          "error": "FileSystemException: Native promotion failed and destination is occupied, path = '<RUN_WORKSPACE>\\race_2\\winner.bin' (OS Error: Native promotion failed and destination is occupied, errno = 183)",
+          "errorType": "PromotionException",
+          "promotionFailure": "conflict",
+          "nativeError": 183,
+          "state": "pending",
+          "metrics": {
+            "enabled": true,
+            "totalMicros": 0,
+            "blockBytes": 0,
+            "checkpointCount": 0,
+            "resumedBytes": 0,
+            "nativeFileSyncCount": 0,
+            "directorySyncCount": 0,
+            "phases": {},
+            "accountedMicros": 0,
+            "unattributedMicros": 0,
+            "sourceHashMicros": 0,
+            "recoveryValidationMicros": 0,
+            "copyCheckpointMicros": 0,
+            "verificationMicros": 0,
+            "finalVerificationMicros": 0,
+            "copyBytesWritten": 0,
+            "checkpointMetadataBytesWritten": 0
+          },
+          "history": [],
+          "stack": "#0      _windowsMove.<anonymous closure> (package:flashguard_ai/core/atomic_file_promoter.dart:264:9)\n#1      using (package:ffi/src/arena.dart:127:31)\n#2      _windowsMove (package:flashguard_ai/core/atomic_file_promoter.dart:244:3)\n#3      NativeAtomicFilePromoter.promoteNoReplace.<anonymous closure> (package:flashguard_ai/core/atomic_file_promoter.dart:121:9)\n#4      _RemoteRunner._run (dart:isolate:1234:47)\n#5      _RemoteRunner._remoteExecute (dart:isolate:1228:12)\n#6      _delayEntrypointInvocation.<anonymous closure> (dart:isolate-patch/isolate_patch.dart:316:17)\n#7      _RawReceivePort._handleMessage (dart:isolate-patch/isolate_patch.dart:192:12)\n",
+          "pid": 6012,
+          "exitCode": 20,
+          "controllerLatencyMicros": 21874729
+        }
+      ],
+      "finalSha256": "48d65e66a08c553200b8e39a8616407e14e3c441b5ba3efc772af46239ab31c8",
+      "atomicNoReplaceDemonstrated": true
+    },
+    {
+      "kind": "nativeProcessRace",
+      "id": "native-race-3",
+      "seed": 5904128,
+      "status": "passed",
+      "round": 3,
+      "scenarioSeed": 5904131,
+      "existingDestination": false,
+      "gates": [
+        {
+          "type": "ready",
+          "stage": "nativePromotion",
+          "offset": 0,
+          "metrics": {
+            "enabled": true,
+            "totalMicros": 0,
+            "blockBytes": 0,
+            "checkpointCount": 0,
+            "resumedBytes": 0,
+            "nativeFileSyncCount": 0,
+            "directorySyncCount": 0,
+            "phases": {},
+            "accountedMicros": 0,
+            "unattributedMicros": 0,
+            "sourceHashMicros": 0,
+            "recoveryValidationMicros": 0,
+            "copyCheckpointMicros": 0,
+            "verificationMicros": 0,
+            "finalVerificationMicros": 0,
+            "copyBytesWritten": 0,
+            "checkpointMetadataBytesWritten": 0
+          },
+          "state": "pending",
+          "history": [],
+          "pid": 29496
+        },
+        {
+          "type": "ready",
+          "stage": "nativePromotion",
+          "offset": 0,
+          "metrics": {
+            "enabled": true,
+            "totalMicros": 0,
+            "blockBytes": 0,
+            "checkpointCount": 0,
+            "resumedBytes": 0,
+            "nativeFileSyncCount": 0,
+            "directorySyncCount": 0,
+            "phases": {},
+            "accountedMicros": 0,
+            "unattributedMicros": 0,
+            "sourceHashMicros": 0,
+            "recoveryValidationMicros": 0,
+            "copyCheckpointMicros": 0,
+            "verificationMicros": 0,
+            "finalVerificationMicros": 0,
+            "copyBytesWritten": 0,
+            "checkpointMetadataBytesWritten": 0
+          },
+          "state": "pending",
+          "history": [],
+          "pid": 10128
+        }
+      ],
+      "writers": [
+        {
+          "type": "result",
+          "status": "passed",
+          "operation": "native",
+          "sha256": "5ba97a2216ad004f37fd8afa6bce296ea94af45da4e5890c08c4ab13c647253c",
+          "destinationFileName": "winner.bin",
+          "endToEndMicros": 105997,
+          "pid": 29496,
+          "exitCode": 0,
+          "controllerLatencyMicros": 15206127
+        },
+        {
+          "type": "result",
+          "status": "failed",
+          "error": "FileSystemException: Native promotion failed and destination is occupied, path = '<RUN_WORKSPACE>\\race_3\\winner.bin' (OS Error: Native promotion failed and destination is occupied, errno = 183)",
+          "errorType": "PromotionException",
+          "promotionFailure": "conflict",
+          "nativeError": 183,
+          "state": "pending",
+          "metrics": {
+            "enabled": true,
+            "totalMicros": 0,
+            "blockBytes": 0,
+            "checkpointCount": 0,
+            "resumedBytes": 0,
+            "nativeFileSyncCount": 0,
+            "directorySyncCount": 0,
+            "phases": {},
+            "accountedMicros": 0,
+            "unattributedMicros": 0,
+            "sourceHashMicros": 0,
+            "recoveryValidationMicros": 0,
+            "copyCheckpointMicros": 0,
+            "verificationMicros": 0,
+            "finalVerificationMicros": 0,
+            "copyBytesWritten": 0,
+            "checkpointMetadataBytesWritten": 0
+          },
+          "history": [],
+          "stack": "#0      _windowsMove.<anonymous closure> (package:flashguard_ai/core/atomic_file_promoter.dart:264:9)\n#1      using (package:ffi/src/arena.dart:127:31)\n#2      _windowsMove (package:flashguard_ai/core/atomic_file_promoter.dart:244:3)\n#3      NativeAtomicFilePromoter.promoteNoReplace.<anonymous closure> (package:flashguard_ai/core/atomic_file_promoter.dart:121:9)\n#4      _RemoteRunner._run (dart:isolate:1234:47)\n#5      _RemoteRunner._remoteExecute (dart:isolate:1228:12)\n#6      _delayEntrypointInvocation.<anonymous closure> (dart:isolate-patch/isolate_patch.dart:316:17)\n#7      _RawReceivePort._handleMessage (dart:isolate-patch/isolate_patch.dart:192:12)\n",
+          "pid": 10128,
+          "exitCode": 20,
+          "controllerLatencyMicros": 15600255
+        }
+      ],
+      "finalSha256": "5ba97a2216ad004f37fd8afa6bce296ea94af45da4e5890c08c4ab13c647253c",
+      "atomicNoReplaceDemonstrated": true
+    },
+    {
+      "kind": "nativeProcessRace",
+      "id": "native-race-4",
+      "seed": 5904128,
+      "status": "passed",
+      "round": 4,
+      "scenarioSeed": 5904132,
+      "existingDestination": false,
+      "gates": [
+        {
+          "type": "ready",
+          "stage": "nativePromotion",
+          "offset": 0,
+          "metrics": {
+            "enabled": true,
+            "totalMicros": 0,
+            "blockBytes": 0,
+            "checkpointCount": 0,
+            "resumedBytes": 0,
+            "nativeFileSyncCount": 0,
+            "directorySyncCount": 0,
+            "phases": {},
+            "accountedMicros": 0,
+            "unattributedMicros": 0,
+            "sourceHashMicros": 0,
+            "recoveryValidationMicros": 0,
+            "copyCheckpointMicros": 0,
+            "verificationMicros": 0,
+            "finalVerificationMicros": 0,
+            "copyBytesWritten": 0,
+            "checkpointMetadataBytesWritten": 0
+          },
+          "state": "pending",
+          "history": [],
+          "pid": 26368
+        },
+        {
+          "type": "ready",
+          "stage": "nativePromotion",
+          "offset": 0,
+          "metrics": {
+            "enabled": true,
+            "totalMicros": 0,
+            "blockBytes": 0,
+            "checkpointCount": 0,
+            "resumedBytes": 0,
+            "nativeFileSyncCount": 0,
+            "directorySyncCount": 0,
+            "phases": {},
+            "accountedMicros": 0,
+            "unattributedMicros": 0,
+            "sourceHashMicros": 0,
+            "recoveryValidationMicros": 0,
+            "copyCheckpointMicros": 0,
+            "verificationMicros": 0,
+            "finalVerificationMicros": 0,
+            "copyBytesWritten": 0,
+            "checkpointMetadataBytesWritten": 0
+          },
+          "state": "pending",
+          "history": [],
+          "pid": 28184
+        }
+      ],
+      "writers": [
+        {
+          "type": "result",
+          "status": "passed",
+          "operation": "native",
+          "sha256": "c137c1e888d40e86077ff6428a679d98f38b5b4f2b73b753bb923277a79a8bad",
+          "destinationFileName": "winner.bin",
+          "endToEndMicros": 343081,
+          "pid": 26368,
+          "exitCode": 0,
+          "controllerLatencyMicros": 24720037
+        },
+        {
+          "type": "result",
+          "status": "failed",
+          "error": "FileSystemException: Native promotion failed and destination is occupied, path = '<RUN_WORKSPACE>\\race_4\\winner.bin' (OS Error: Native promotion failed and destination is occupied, errno = 183)",
+          "errorType": "PromotionException",
+          "promotionFailure": "conflict",
+          "nativeError": 183,
+          "state": "pending",
+          "metrics": {
+            "enabled": true,
+            "totalMicros": 0,
+            "blockBytes": 0,
+            "checkpointCount": 0,
+            "resumedBytes": 0,
+            "nativeFileSyncCount": 0,
+            "directorySyncCount": 0,
+            "phases": {},
+            "accountedMicros": 0,
+            "unattributedMicros": 0,
+            "sourceHashMicros": 0,
+            "recoveryValidationMicros": 0,
+            "copyCheckpointMicros": 0,
+            "verificationMicros": 0,
+            "finalVerificationMicros": 0,
+            "copyBytesWritten": 0,
+            "checkpointMetadataBytesWritten": 0
+          },
+          "history": [],
+          "stack": "#0      _windowsMove.<anonymous closure> (package:flashguard_ai/core/atomic_file_promoter.dart:264:9)\n#1      using (package:ffi/src/arena.dart:127:31)\n#2      _windowsMove (package:flashguard_ai/core/atomic_file_promoter.dart:244:3)\n#3      NativeAtomicFilePromoter.promoteNoReplace.<anonymous closure> (package:flashguard_ai/core/atomic_file_promoter.dart:121:9)\n#4      _RemoteRunner._run (dart:isolate:1234:47)\n#5      _RemoteRunner._remoteExecute (dart:isolate:1228:12)\n#6      _delayEntrypointInvocation.<anonymous closure> (dart:isolate-patch/isolate_patch.dart:316:17)\n#7      _RawReceivePort._handleMessage (dart:isolate-patch/isolate_patch.dart:192:12)\n",
+          "pid": 28184,
+          "exitCode": 20,
+          "controllerLatencyMicros": 24715548
+        }
+      ],
+      "finalSha256": "c137c1e888d40e86077ff6428a679d98f38b5b4f2b73b753bb923277a79a8bad",
+      "atomicNoReplaceDemonstrated": true
+    },
+    {
+      "kind": "nativeProcessRace",
+      "id": "occupied-destination",
+      "seed": 5904128,
+      "status": "passed",
+      "round": -1,
+      "scenarioSeed": 5904128,
+      "existingDestination": true,
+      "gates": [
+        {
+          "type": "ready",
+          "stage": "nativePromotion",
+          "offset": 0,
+          "metrics": {
+            "enabled": true,
+            "totalMicros": 0,
+            "blockBytes": 0,
+            "checkpointCount": 0,
+            "resumedBytes": 0,
+            "nativeFileSyncCount": 0,
+            "directorySyncCount": 0,
+            "phases": {},
+            "accountedMicros": 0,
+            "unattributedMicros": 0,
+            "sourceHashMicros": 0,
+            "recoveryValidationMicros": 0,
+            "copyCheckpointMicros": 0,
+            "verificationMicros": 0,
+            "finalVerificationMicros": 0,
+            "copyBytesWritten": 0,
+            "checkpointMetadataBytesWritten": 0
+          },
+          "state": "pending",
+          "history": [],
+          "pid": 16632
+        },
+        {
+          "type": "ready",
+          "stage": "nativePromotion",
+          "offset": 0,
+          "metrics": {
+            "enabled": true,
+            "totalMicros": 0,
+            "blockBytes": 0,
+            "checkpointCount": 0,
+            "resumedBytes": 0,
+            "nativeFileSyncCount": 0,
+            "directorySyncCount": 0,
+            "phases": {},
+            "accountedMicros": 0,
+            "unattributedMicros": 0,
+            "sourceHashMicros": 0,
+            "recoveryValidationMicros": 0,
+            "copyCheckpointMicros": 0,
+            "verificationMicros": 0,
+            "finalVerificationMicros": 0,
+            "copyBytesWritten": 0,
+            "checkpointMetadataBytesWritten": 0
+          },
+          "state": "pending",
+          "history": [],
+          "pid": 13016
+        }
+      ],
+      "writers": [
+        {
+          "type": "result",
+          "status": "failed",
+          "error": "FileSystemException: Native promotion failed and destination is occupied, path = '<RUN_WORKSPACE>\\race_-1\\winner.bin' (OS Error: Native promotion failed and destination is occupied, errno = 183)",
+          "errorType": "PromotionException",
+          "promotionFailure": "conflict",
+          "nativeError": 183,
+          "state": "pending",
+          "metrics": {
+            "enabled": true,
+            "totalMicros": 0,
+            "blockBytes": 0,
+            "checkpointCount": 0,
+            "resumedBytes": 0,
+            "nativeFileSyncCount": 0,
+            "directorySyncCount": 0,
+            "phases": {},
+            "accountedMicros": 0,
+            "unattributedMicros": 0,
+            "sourceHashMicros": 0,
+            "recoveryValidationMicros": 0,
+            "copyCheckpointMicros": 0,
+            "verificationMicros": 0,
+            "finalVerificationMicros": 0,
+            "copyBytesWritten": 0,
+            "checkpointMetadataBytesWritten": 0
+          },
+          "history": [],
+          "stack": "#0      _windowsMove.<anonymous closure> (package:flashguard_ai/core/atomic_file_promoter.dart:264:9)\n#1      using (package:ffi/src/arena.dart:127:31)\n#2      _windowsMove (package:flashguard_ai/core/atomic_file_promoter.dart:244:3)\n#3      NativeAtomicFilePromoter.promoteNoReplace.<anonymous closure> (package:flashguard_ai/core/atomic_file_promoter.dart:121:9)\n#4      _RemoteRunner._run (dart:isolate:1234:47)\n#5      _RemoteRunner._remoteExecute (dart:isolate:1228:12)\n#6      _delayEntrypointInvocation.<anonymous closure> (dart:isolate-patch/isolate_patch.dart:316:17)\n#7      _RawReceivePort._handleMessage (dart:isolate-patch/isolate_patch.dart:192:12)\n",
+          "pid": 16632,
+          "exitCode": 20,
+          "controllerLatencyMicros": 9517081
+        },
+        {
+          "type": "result",
+          "status": "failed",
+          "error": "FileSystemException: Native promotion failed and destination is occupied, path = '<RUN_WORKSPACE>\\race_-1\\winner.bin' (OS Error: Native promotion failed and destination is occupied, errno = 183)",
+          "errorType": "PromotionException",
+          "promotionFailure": "conflict",
+          "nativeError": 183,
+          "state": "pending",
+          "metrics": {
+            "enabled": true,
+            "totalMicros": 0,
+            "blockBytes": 0,
+            "checkpointCount": 0,
+            "resumedBytes": 0,
+            "nativeFileSyncCount": 0,
+            "directorySyncCount": 0,
+            "phases": {},
+            "accountedMicros": 0,
+            "unattributedMicros": 0,
+            "sourceHashMicros": 0,
+            "recoveryValidationMicros": 0,
+            "copyCheckpointMicros": 0,
+            "verificationMicros": 0,
+            "finalVerificationMicros": 0,
+            "copyBytesWritten": 0,
+            "checkpointMetadataBytesWritten": 0
+          },
+          "history": [],
+          "stack": "#0      _windowsMove.<anonymous closure> (package:flashguard_ai/core/atomic_file_promoter.dart:264:9)\n#1      using (package:ffi/src/arena.dart:127:31)\n#2      _windowsMove (package:flashguard_ai/core/atomic_file_promoter.dart:244:3)\n#3      NativeAtomicFilePromoter.promoteNoReplace.<anonymous closure> (package:flashguard_ai/core/atomic_file_promoter.dart:121:9)\n#4      _RemoteRunner._run (dart:isolate:1234:47)\n#5      _RemoteRunner._remoteExecute (dart:isolate:1228:12)\n#6      _delayEntrypointInvocation.<anonymous closure> (dart:isolate-patch/isolate_patch.dart:316:17)\n#7      _RawReceivePort._handleMessage (dart:isolate-patch/isolate_patch.dart:192:12)\n",
+          "pid": 13016,
+          "exitCode": 20,
+          "controllerLatencyMicros": 7977022
+        }
+      ],
+      "finalSha256": "35e0dd34edbb85e45f2b90b93c4c49fcc02eeacd0303906848c013b818c928a1",
+      "atomicNoReplaceDemonstrated": true
+    },
+    {
+      "kind": "workspaceProcessRace",
+      "id": "workspace-kill-restart",
+      "seed": 5904128,
+      "status": "passed",
+      "checkpointReady": {
+        "type": "ready",
+        "stage": "checkpointSaved",
+        "offset": 16777216,
+        "metrics": {
+          "enabled": true,
+          "totalMicros": 0,
+          "blockBytes": 16777216,
+          "checkpointCount": 1,
+          "resumedBytes": 0,
+          "nativeFileSyncCount": 0,
+          "directorySyncCount": 0,
+          "phases": {
+            "setup": {
+              "micros": 24152,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "sourceHash": {
+              "micros": 510558,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "checkpointValidation": {
+              "micros": 2592,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "sourceRead": {
+              "micros": 7912,
+              "operations": 1,
+              "bytesRead": 16777216,
+              "bytesWritten": 0
+            },
+            "blockWrite": {
+              "micros": 9165,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 16777216
+            },
+            "dataFlush": {
+              "micros": 325841,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "blockHash": {
+              "micros": 235182,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "checkpointSerialization": {
+              "micros": 3345,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "checkpointPersistence": {
+              "micros": 609717,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 455
+            }
+          },
+          "accountedMicros": 1728464,
+          "unattributedMicros": -1728464,
+          "sourceHashMicros": 510558,
+          "recoveryValidationMicros": 2592,
+          "copyCheckpointMicros": 0,
+          "verificationMicros": 0,
+          "finalVerificationMicros": 0,
+          "copyBytesWritten": 16777216,
+          "checkpointMetadataBytesWritten": 455
+        },
+        "state": "checkpointed",
+        "history": [
+          "pending -> hashingSource",
+          "hashingSource -> copying",
+          "copying -> checkpointed"
+        ],
+        "pid": 17204
+      },
+      "blockBytes": 16777216,
+      "contender": {
+        "type": "result",
+        "status": "failed",
+        "error": "FileSystemException: Workspace is busy or inaccessible; no part was opened, path = '<RUN_WORKSPACE>/workspace_race/vault\\source.bin.transfer.lock'",
+        "errorType": "PromotionException",
+        "promotionFailure": "io",
+        "nativeError": null,
+        "state": "failed",
+        "metrics": {
+          "enabled": true,
+          "totalMicros": 712948,
+          "blockBytes": 16777216,
+          "checkpointCount": 0,
+          "resumedBytes": 0,
+          "nativeFileSyncCount": 0,
+          "directorySyncCount": 0,
+          "phases": {
+            "setup": {
+              "micros": 16713,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "sourceHash": {
+              "micros": 680703,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "cleanup": {
+              "micros": 136,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            }
+          },
+          "accountedMicros": 697552,
+          "unattributedMicros": 15396,
+          "sourceHashMicros": 680703,
+          "recoveryValidationMicros": 0,
+          "copyCheckpointMicros": 0,
+          "verificationMicros": 0,
+          "finalVerificationMicros": 0,
+          "copyBytesWritten": 0,
+          "checkpointMetadataBytesWritten": 0
+        },
+        "history": [
+          "pending -> hashingSource",
+          "hashingSource -> failed"
+        ],
+        "stack": "#0      _openWorkspace.<anonymous closure> (package:flashguard_ai/core/atomic_file_promoter.dart:377:9)\n#1      using (package:ffi/src/arena.dart:127:31)\n#2      _openWorkspace (package:flashguard_ai/core/atomic_file_promoter.dart:366:10)\n#3      NativeAtomicFilePromoter.acquireWorkspace.<anonymous closure> (package:flashguard_ai/core/atomic_file_promoter.dart:83:44)\n#4      _RemoteRunner._run (dart:isolate:1234:47)\n#5      _RemoteRunner._remoteExecute (dart:isolate:1228:12)\n#6      _delayEntrypointInvocation.<anonymous closure> (dart:isolate-patch/isolate_patch.dart:316:17)\n#7      _RawReceivePort._handleMessage (dart:isolate-patch/isolate_patch.dart:192:12)\n",
+        "pid": 24416,
+        "exitCode": 20,
+        "controllerLatencyMicros": 1507218
+      },
+      "forcedExitCode": -1,
+      "retryB": {
+        "type": "result",
+        "status": "passed",
+        "operation": "engine",
+        "state": "committed",
+        "sha256": "568ba15d99fd08fc9fbf17b08ea80c63310fea08ba88ea5d73fbe99c1fc0a274",
+        "destinationFileName": "source.bin",
+        "byteSize": 33554432,
+        "byteForByteVerified": true,
+        "resumedBytes": 0,
+        "transferredBytes": 33554432,
+        "reusedExistingCopy": false,
+        "endToEndMicros": 7127500,
+        "endToEndMiBs": 4.489652753419852,
+        "copyCheckpointMiBs": 9.010163182502263,
+        "metrics": {
+          "enabled": true,
+          "totalMicros": 7123463,
+          "blockBytes": 16777216,
+          "checkpointCount": 2,
+          "resumedBytes": 0,
+          "nativeFileSyncCount": 3,
+          "directorySyncCount": 0,
+          "phases": {
+            "setup": {
+              "micros": 434709,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "sourceHash": {
+              "micros": 742993,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "checkpointValidation": {
+              "micros": 13329,
+              "operations": 1,
+              "bytesRead": 455,
+              "bytesWritten": 0
+            },
+            "sourceRead": {
+              "micros": 24011,
+              "operations": 2,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "blockWrite": {
+              "micros": 37518,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 33554432
+            },
+            "dataFlush": {
+              "micros": 2070876,
+              "operations": 3,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "blockHash": {
+              "micros": 467502,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "checkpointSerialization": {
+              "micros": 1638,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "checkpointPersistence": {
+              "micros": 944543,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 977
+            },
+            "tempVerification": {
+              "micros": 481200,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "sourceConsistency": {
+              "micros": 578487,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "mediaInspection": {
+              "micros": 3235,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "durability": {
+              "micros": 399871,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "promotion": {
+              "micros": 22270,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "finalVerification": {
+              "micros": 885098,
+              "operations": 1,
+              "bytesRead": 67108864,
+              "bytesWritten": 0
+            },
+            "cleanup": {
+              "micros": 2651,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            }
+          },
+          "accountedMicros": 7109931,
+          "unattributedMicros": 13532,
+          "sourceHashMicros": 742993,
+          "recoveryValidationMicros": 13329,
+          "copyCheckpointMicros": 3551545,
+          "verificationMicros": 1063611,
+          "finalVerificationMicros": 885098,
+          "copyBytesWritten": 33554432,
+          "checkpointMetadataBytesWritten": 977
+        },
+        "profilingEnabled": true,
+        "checkpointBlockBytes": 16777216,
+        "logicalWriteAmplification": 1.0000291168689728,
+        "physicalWriteAmplification": null,
+        "processCpuMicros": 3343750,
+        "rssBeforeBytes": 210767872,
+        "rssAfterBytes": 232292352,
+        "maxRssBytes": 284102656,
+        "history": [
+          "pending -> hashingSource",
+          "hashingSource -> copying",
+          "copying -> checkpointed",
+          "checkpointed -> copying",
+          "copying -> checkpointed",
+          "checkpointed -> verifying",
+          "verifying -> promoting",
+          "promoting -> committed"
+        ],
+        "pid": 8556,
+        "exitCode": 0,
+        "controllerLatencyMicros": 11363104
+      },
+      "retryA": {
+        "type": "result",
+        "status": "passed",
+        "operation": "engine",
+        "state": "committed",
+        "sha256": "b804d8d2651753914866fd1bf71ccce151a907471c38a1542638a5161109ea9c",
+        "destinationFileName": "source (2).bin",
+        "byteSize": 33554432,
+        "byteForByteVerified": true,
+        "resumedBytes": 0,
+        "transferredBytes": 33554432,
+        "reusedExistingCopy": false,
+        "endToEndMicros": 6629459,
+        "endToEndMiBs": 4.826939875486069,
+        "copyCheckpointMiBs": 11.90133053156177,
+        "metrics": {
+          "enabled": true,
+          "totalMicros": 6624820,
+          "blockBytes": 16777216,
+          "checkpointCount": 2,
+          "resumedBytes": 0,
+          "nativeFileSyncCount": 3,
+          "directorySyncCount": 0,
+          "phases": {
+            "setup": {
+              "micros": 55170,
+              "operations": 3,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "sourceHash": {
+              "micros": 552886,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "existingCopyVerification": {
+              "micros": 575702,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "checkpointValidation": {
+              "micros": 3124,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "sourceRead": {
+              "micros": 19119,
+              "operations": 2,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "blockWrite": {
+              "micros": 146546,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 33554432
+            },
+            "dataFlush": {
+              "micros": 1624353,
+              "operations": 3,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "blockHash": {
+              "micros": 508061,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "checkpointSerialization": {
+              "micros": 3982,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "checkpointPersistence": {
+              "micros": 383366,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 977
+            },
+            "tempVerification": {
+              "micros": 482066,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "sourceConsistency": {
+              "micros": 465606,
+              "operations": 1,
+              "bytesRead": 33554432,
+              "bytesWritten": 0
+            },
+            "mediaInspection": {
+              "micros": 1081,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "durability": {
+              "micros": 844190,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "promotion": {
+              "micros": 22314,
+              "operations": 1,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            },
+            "finalVerification": {
+              "micros": 925102,
+              "operations": 1,
+              "bytesRead": 67108864,
+              "bytesWritten": 0
+            },
+            "cleanup": {
+              "micros": 3663,
+              "operations": 2,
+              "bytesRead": 0,
+              "bytesWritten": 0
+            }
+          },
+          "accountedMicros": 6616331,
+          "unattributedMicros": 8489,
+          "sourceHashMicros": 552886,
+          "recoveryValidationMicros": 3124,
+          "copyCheckpointMicros": 2688775,
+          "verificationMicros": 949025,
+          "finalVerificationMicros": 925102,
+          "copyBytesWritten": 33554432,
+          "checkpointMetadataBytesWritten": 977
+        },
+        "profilingEnabled": true,
+        "checkpointBlockBytes": 16777216,
+        "logicalWriteAmplification": 1.0000291168689728,
+        "physicalWriteAmplification": null,
+        "processCpuMicros": 4062500,
+        "rssBeforeBytes": 210890752,
+        "rssAfterBytes": 227360768,
+        "maxRssBytes": 284106752,
+        "history": [
+          "pending -> hashingSource",
+          "hashingSource -> copying",
+          "copying -> checkpointed",
+          "checkpointed -> copying",
+          "copying -> checkpointed",
+          "checkpointed -> verifying",
+          "verifying -> promoting",
+          "promoting -> committed"
+        ],
+        "pid": 29116,
+        "exitCode": 0,
+        "controllerLatencyMicros": 8905159
+      },
+      "staleLockRecovered": true,
+      "cooperativeWorkspaceProtection": true
+    },
+    {
+      "kind": "diskFull",
+      "id": "real-disk-full",
+      "seed": 5904128,
+      "status": "skipped",
+      "reason": "Disabled: no explicit disposable-volume opt-in",
+      "realEnospcObserved": false
+    }
+  ],
+  "pathRedactions": {
+    "appliedBeforePublication": true,
+    "description": "Repository and temporary-root strings replaced; measurements unchanged.",
+    "originalArtifactSha256": "6026deed7764323ba478b63e19df297fabb73cf552cab91020c28692f50f1ee6"
+  }
+}

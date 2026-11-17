@@ -14,7 +14,7 @@ import 'model.dart';
 Future<void> workerMain() async {
   final commands = StreamIterator(
       stdin.transform(utf8.decoder).transform(const LineSplitter()));
-  final metrics = TransferDiagnostics();
+  var metrics = TransferDiagnostics();
   final lifecycle = TransferStateMachine();
   final timer = Stopwatch();
   Future<void> send(Map<String, Object?> event) async {
@@ -27,6 +27,7 @@ Future<void> workerMain() async {
       throw StateError('Missing worker configuration');
     }
     final config = jsonDecode(commands.current) as Map<String, dynamic>;
+    metrics = TransferDiagnostics(enabled: config['profiling'] != false);
     var held = false;
     Future<void> probe(String stage, int offset) async {
       if (!held && stage == config['holdStage']) {
@@ -73,9 +74,11 @@ Future<void> workerMain() async {
         destinationDir: destination,
         checkpointBlockBytes: config['blockBytes'] as int? ?? 256 * 1024,
         expectedSha256: config['expectedSha256'] as String?,
-        diagnostics: metrics,
+        diagnostics: config['profiling'] == false ? null : metrics,
         lifecycle: lifecycle,
-        onProbe: (event) => probe(event.stage.name, event.offset),
+        onProbe: config['holdStage'] == null
+            ? null
+            : (event) => probe(event.stage.name, event.offset),
       );
       timer.stop();
       final cpuAfter = await processCpuMicros();
@@ -100,7 +103,9 @@ Future<void> workerMain() async {
                 mib /
                 (metrics.copyCheckpointMicros / 1000000),
         'metrics': metrics.toJson(),
-        'logicalWriteAmplification': result.byteSize == 0
+        'profilingEnabled': config['profiling'] != false,
+        'checkpointBlockBytes': config['blockBytes'] as int? ?? 256 * 1024,
+        'logicalWriteAmplification': !metrics.enabled || result.byteSize == 0
             ? null
             : (metrics.copyBytesWritten +
                     metrics.checkpointMetadataBytesWritten) /

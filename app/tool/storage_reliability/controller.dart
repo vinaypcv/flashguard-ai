@@ -9,6 +9,8 @@ import 'environment.dart';
 import 'model.dart';
 import 'process_worker.dart';
 import 'worker.dart';
+import 'ab.dart';
+import 'publication.dart';
 
 Future<void> main(List<String> args) async {
   if (args.length == 1 && args.single == '--worker') return workerMain();
@@ -82,6 +84,10 @@ Future<void> main(List<String> args) async {
     };
     requireCondition(capabilities.atomicNoReplace,
         'Native operation unsupported: ${capabilities.description}');
+    if (options.blockMiB != null) {
+      requireCondition(volume.freeBytes > (32 * options.blockMiB! + 1024) * mib,
+          'Insufficient free-space margin for the requested block-size experiments');
+    }
     if (options.suite == 'all' || options.suite == 'reliability') {
       for (final stage in [
         'blockFlushed',
@@ -90,8 +96,14 @@ Future<void> main(List<String> args) async {
         'promotionStarted',
         'promoted'
       ]) {
-        await experiment('processKill', stage,
-            () => killRecovery(root, options.seed, stage));
+        await experiment(
+            'processKill',
+            stage,
+            () => killRecovery(root, options.seed, stage,
+                blockBytes: (options.blockMiB ?? 0) == 0
+                    ? 256 * 1024
+                    : options.blockMiB! * mib,
+                profiling: options.profiling));
       }
       for (var round = 0; round < options.rounds; round++) {
         await experiment(
@@ -102,10 +114,21 @@ Future<void> main(List<String> args) async {
       }
       await experiment('nativeProcessRace', 'occupied-destination',
           () => nativeRace(root, options.seed, -1, occupied: true));
-      await experiment('workspaceProcessRace', 'workspace-kill-restart',
-          () => workspaceRace(root, options.seed));
+      await experiment(
+          'workspaceProcessRace',
+          'workspace-kill-restart',
+          () => workspaceRace(root, options.seed,
+              blockBytes: options.blockMiB == null
+                  ? 256 * 1024
+                  : options.blockMiB! * mib,
+              profiling: options.profiling));
     }
-    if (options.suite != 'reliability') {
+    if (options.suite == 'ab') {
+      for (final size in options.sizes) {
+        await experiment('abBenchmark', 'ab-${size}MiB',
+            () => pairedBenchmark(root, options, size));
+      }
+    } else if (options.suite != 'reliability') {
       for (final size in options.suite == 'smoke' ? [1] : options.sizes) {
         await experiment(
             'benchmark',
@@ -150,9 +173,14 @@ Future<void> main(List<String> args) async {
   };
   final output = File(options.output);
   await output.parent.create(recursive: true);
+  final published = await publicationCopy(artifact, root.path);
   await output.writeAsString(
-      '${const JsonEncoder.withIndent('  ').convert(artifact)}\n',
+      '${const JsonEncoder.withIndent('  ').convert(published)}\n',
       flush: true);
+  if (options.suite == 'ab') {
+    await File('${options.output}.md')
+        .writeAsString(comparisonMarkdown(published));
+  }
   stdout.writeln('Evidence: ${output.absolute.path} ${artifact['summary']}');
   if (failed == 0) await root.delete(recursive: true);
   exitCode = failed == 0 ? 0 : 1;
@@ -185,13 +213,14 @@ Future<Map<String, Object?>> fixture(File file, int bytes, int seed) async {
 }
 
 Map<String, Object?> engineConfig(File source, Directory vault, String hash,
-        {String? hold, int blockBytes = 256 * 1024}) =>
+        {String? hold, int blockBytes = 256 * 1024, bool profiling = true}) =>
     {
       'source': source.absolute.path,
       'destination': vault.absolute.path,
       'expectedSha256': hash,
       'holdStage': hold,
-      'blockBytes': blockBytes
+      'blockBytes': blockBytes,
+      'profiling': profiling,
     };
 
 Future<Map<String, dynamic>> runWorker(Map<String, Object?> config) async {
@@ -247,14 +276,16 @@ Future<Map<String, Object?>> snapshot(File source, Directory vault) async {
 }
 
 Future<Map<String, Object?>> killRecovery(
-    Directory root, int seed, String stage) async {
+    Directory root, int seed, String stage,
+    {int blockBytes = 256 * 1024, bool profiling = true}) async {
   final area = await Directory('${root.path}/kill_$stage').create();
   final source = File('${area.path}/source.bin');
-  final info = await fixture(source, 2 * mib, seed);
+  final info =
+      await fixture(source, (2 * blockBytes).clamp(2 * mib, 128 * mib), seed);
   final hash = info['sha256'] as String;
   final vault = await Directory('${area.path}/vault').create();
-  final worker =
-      await ProcessWorker.start(engineConfig(source, vault, hash, hold: stage));
+  final worker = await ProcessWorker.start(engineConfig(source, vault, hash,
+      hold: stage, blockBytes: blockBytes, profiling: profiling));
   Map<String, dynamic>? gate;
   try {
     gate = await worker.ready();
@@ -265,13 +296,14 @@ Future<Map<String, Object?>> killRecovery(
     if (stage == 'blockFlushed') {
       requireCondition(
           saved['checkpointExists'] == false &&
-              saved['partBytes'] == 256 * 1024,
+              saved['partBytes'] == blockBytes,
           'Before-checkpoint test did not leave an unjournaled block: $saved');
     } else {
       requireCondition(
           saved['checkpointExists'] == true, 'Expected checkpoint at $stage');
     }
-    final recovered = await runWorker(engineConfig(source, vault, hash));
+    final recovered = await runWorker(engineConfig(source, vault, hash,
+        blockBytes: blockBytes, profiling: profiling));
     await assertAudit(recovered, source, vault, hash);
     final expectedResume = stage == 'promoted' || stage == 'blockFlushed'
         ? 0
@@ -280,6 +312,7 @@ Future<Map<String, Object?>> killRecovery(
         'Unexpected recovery reuse: $recovered');
     return {
       'failureStage': stage,
+      'blockBytes': blockBytes,
       'forcedExitCode': killed,
       'checkpointReady': gate,
       'snapshot': saved,
@@ -361,34 +394,40 @@ Future<Map<String, Object?>> nativeRace(Directory root, int seed, int round,
   }
 }
 
-Future<Map<String, Object?>> workspaceRace(Directory root, int seed) async {
+Future<Map<String, Object?>> workspaceRace(Directory root, int seed,
+    {int blockBytes = 256 * 1024, bool profiling = true}) async {
   final area = await Directory('${root.path}/workspace_race').create();
   final a = File('${area.path}/a/source.bin');
   final b = File('${area.path}/b/source.bin');
-  final hashA = (await fixture(a, mib, seed))['sha256'] as String;
-  final hashB = (await fixture(b, mib, seed + 1))['sha256'] as String;
+  final size = (blockBytes * 2).clamp(mib, 128 * mib);
+  final hashA = (await fixture(a, size, seed))['sha256'] as String;
+  final hashB = (await fixture(b, size, seed + 1))['sha256'] as String;
   final vault = await Directory('${area.path}/vault').create();
-  final owner = await ProcessWorker.start(
-      engineConfig(a, vault, hashA, hold: 'checkpointSaved'));
+  final owner = await ProcessWorker.start(engineConfig(a, vault, hashA,
+      hold: 'checkpointSaved', blockBytes: blockBytes, profiling: profiling));
   try {
     final gate = await owner.ready();
-    final contender = await runWorker(engineConfig(b, vault, hashB));
+    final contender = await runWorker(engineConfig(b, vault, hashB,
+        blockBytes: blockBytes, profiling: profiling));
     requireCondition(
         contender['status'] == 'failed' &&
             contender['promotionFailure'] == 'io',
         'Workspace contender did not fail explicitly: $contender');
     final killed = await owner.kill();
-    final retryB = await runWorker(engineConfig(b, vault, hashB));
+    final retryB = await runWorker(engineConfig(b, vault, hashB,
+        blockBytes: blockBytes, profiling: profiling));
     await assertAudit(retryB, b, vault, hashB);
     requireCondition(retryB['resumedBytes'] == 0,
         'Checkpoint from another source was trusted');
-    final retryA = await runWorker(engineConfig(a, vault, hashA));
+    final retryA = await runWorker(engineConfig(a, vault, hashA,
+        blockBytes: blockBytes, profiling: profiling));
     await assertAudit(retryA, a, vault, hashA);
     requireCondition(retryA['destinationFileName'] == 'source (2).bin',
         'Numbered retry policy changed');
     await assertAudit(retryB, b, vault, hashB);
     return {
       'checkpointReady': gate,
+      'blockBytes': blockBytes,
       'contender': contender,
       'forcedExitCode': killed,
       'retryB': retryB,
@@ -416,11 +455,12 @@ Future<Map<String, Object?>> benchmark(
   final source = File('${area.path}/source.bin');
   final info = await fixture(source, size, options.seed);
   final hash = info['sha256'] as String;
+  final blockBytes = (options.blockMiB ?? 4) * mib;
   Future<Map<String, dynamic>> sample(String name) async {
     final vault = await Directory('${area.path}/$name').create();
     try {
-      final result = await runWorker(
-          engineConfig(source, vault, hash, blockBytes: 4 * mib));
+      final result = await runWorker(engineConfig(source, vault, hash,
+          blockBytes: blockBytes, profiling: options.profiling));
       await assertAudit(result, source, vault, hash);
       return result;
     } finally {
@@ -435,14 +475,16 @@ Future<Map<String, Object?>> benchmark(
   }
   final vault = await Directory('${area.path}/resume').create();
   final worker = await ProcessWorker.start(engineConfig(source, vault, hash,
-      hold: 'checkpointSaved', blockBytes: 4 * mib));
+      hold: 'checkpointSaved',
+      blockBytes: blockBytes,
+      profiling: options.profiling));
   late Map<String, dynamic> resumed;
   late Map<String, dynamic> gate;
   try {
     gate = await worker.ready();
     await worker.kill();
-    resumed =
-        await runWorker(engineConfig(source, vault, hash, blockBytes: 4 * mib));
+    resumed = await runWorker(engineConfig(source, vault, hash,
+        blockBytes: blockBytes, profiling: options.profiling));
     await assertAudit(resumed, source, vault, hash);
     requireCondition(
         resumed['resumedBytes'] == gate['offset'] &&
