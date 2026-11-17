@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 
+import 'transfer_state_machine.dart';
+
 enum MediaIntegrityStatus {
   valid,
   corruptedHeader,
@@ -159,6 +161,9 @@ class IntegrityEngine {
   static Future<FileAuditResult> verifiedOffload({
     required File source,
     required Directory destinationDir,
+    Directory? destinationRoot,
+    TransferStateMachine? lifecycle,
+    FutureOr<void> Function()? beforePromotion,
     FutureOr<void> Function(double progress)? onProgress,
     String? expectedSha256,
     int checkpointBlockBytes = 4 * 1024 * 1024,
@@ -167,6 +172,7 @@ class IntegrityEngine {
       throw ArgumentError.value(checkpointBlockBytes, 'checkpointBlockBytes');
     }
     final timer = Stopwatch()..start();
+    final state = lifecycle ?? TransferStateMachine();
     final fileName = source.uri.pathSegments.last;
     late final File finalFile;
     late final File tempFile;
@@ -175,10 +181,16 @@ class IntegrityEngine {
     late final File checkpointStagingFile;
     RandomAccessFile? output;
     var discardPartial = false;
+    var pathsReady = false;
     try {
+      await _validateDestination(
+          destinationRoot ?? destinationDir, destinationDir);
       if (!await destinationDir.exists()) {
         await destinationDir.create(recursive: true);
       }
+      await _validateDestination(
+          destinationRoot ?? destinationDir, destinationDir);
+      state.transition(TransferState.hashingSource);
       final totalBytes = await source.length();
       final sourceDigest =
           (await sha256.bind(source.openRead()).single).toString();
@@ -198,6 +210,11 @@ class IntegrityEngine {
         final candidate = File(
           '${destinationDir.path}${Platform.pathSeparator}$candidateName',
         );
+        if (await FileSystemEntity.type(candidate.path, followLinks: false) ==
+            FileSystemEntityType.link) {
+          throw FileSystemException(
+              'Destination is a symbolic link', candidate.path);
+        }
         if (await candidate.exists()) {
           final existingResult = await _reuseExistingCopy(
             source: source,
@@ -206,7 +223,11 @@ class IntegrityEngine {
             totalBytes: totalBytes,
             sourceDigest: sourceDigest,
           );
-          if (existingResult != null) return existingResult;
+          if (existingResult != null) {
+            state.transition(TransferState.verifying);
+            state.transition(TransferState.committed);
+            return existingResult;
+          }
           copyNumber++;
           continue;
         }
@@ -218,6 +239,20 @@ class IntegrityEngine {
       checkpointFile = File('${finalFile.path}.checkpoint.json');
       checkpointBackupFile = File('${checkpointFile.path}.bak');
       checkpointStagingFile = File('${checkpointFile.path}.tmp');
+      pathsReady = true;
+      for (final file in [
+        finalFile,
+        tempFile,
+        checkpointFile,
+        checkpointBackupFile,
+        checkpointStagingFile
+      ]) {
+        if (await FileSystemEntity.type(file.path, followLinks: false) ==
+            FileSystemEntityType.link) {
+          throw FileSystemException(
+              'Destination sidecar is a symbolic link', file.path);
+        }
+      }
 
       var resumedBytes = 0;
       var blockHashes = <String>[];
@@ -312,6 +347,7 @@ class IntegrityEngine {
       }
 
       output = await tempFile.open(mode: FileMode.append);
+      state.transition(TransferState.copying);
       await output.truncate(resumedBytes);
       await output.setPosition(resumedBytes);
       final input = await source.open();
@@ -362,7 +398,12 @@ class IntegrityEngine {
               'offset': copiedBytes,
               'blockSha256': List<String>.from(blockHashes),
             });
+          state.transition(TransferState.checkpointed);
           if (totalBytes > 0) await onProgress?.call(copiedBytes / totalBytes);
+          if (copiedBytes < totalBytes &&
+              state.state == TransferState.checkpointed) {
+            state.transition(TransferState.copying);
+          }
         }
       } finally {
         await input.close();
@@ -370,6 +411,7 @@ class IntegrityEngine {
       await output.flush();
       await output.close();
       output = null;
+      state.transition(TransferState.verifying);
 
       final destinationDigest =
           (await sha256.bind(tempFile.openRead()).single).toString();
@@ -389,7 +431,26 @@ class IntegrityEngine {
       if (status == MediaIntegrityStatus.ioError) {
         throw FileSystemException('Media inspection failed', tempFile.path);
       }
+      state.transition(TransferState.promoting);
+      await beforePromotion?.call();
+      // Dart's rename may replace an existing file on some platforms. This
+      // check prevents ordinary conflicts; cross-process no-clobber atomicity
+      // still requires a platform-specific primitive.
+      if (await finalFile.exists()) {
+        throw FileSystemException(
+            'Destination appeared before promotion', finalFile.path);
+      }
       await tempFile.rename(finalFile.path);
+      if (!await finalFile.exists() ||
+          await finalFile.length() != totalBytes ||
+          (await sha256.bind(finalFile.openRead()).single).toString() !=
+              sourceDigest ||
+          (await sha256.bind(source.openRead()).single).toString() !=
+              sourceDigest) {
+        throw FileSystemException(
+            'Promoted file failed final verification', finalFile.path);
+      }
+      state.transition(TransferState.committed);
       for (final file in [
         checkpointFile,
         checkpointBackupFile,
@@ -416,20 +477,31 @@ class IntegrityEngine {
         resumedBytes: resumedBytes,
         transferredBytes: totalBytes - resumedBytes,
       );
-    } catch (_) {
+    } catch (error) {
+      if (state.state != TransferState.committed &&
+          state.state != TransferState.failed &&
+          state.state != TransferState.cancelled) {
+        state.transition(error is TransferCancelledException
+            ? TransferState.cancelled
+            : TransferState.failed);
+      }
       if (output != null) {
         try {
           await output.close();
         } catch (_) {}
       }
-      if (discardPartial) {
-        if (await tempFile.exists()) await tempFile.delete();
-        for (final checkpoint in [
-          checkpointFile,
-          checkpointBackupFile,
-          checkpointStagingFile,
-        ]) {
-          if (await checkpoint.exists()) await checkpoint.delete();
+      if (discardPartial && pathsReady) {
+        try {
+          if (await tempFile.exists()) await tempFile.delete();
+          for (final checkpoint in [
+            checkpointFile,
+            checkpointBackupFile,
+            checkpointStagingFile,
+          ]) {
+            if (await checkpoint.exists()) await checkpoint.delete();
+          }
+        } on FileSystemException {
+          // Preserve the original verification failure.
         }
       }
       rethrow;
@@ -481,6 +553,41 @@ class IntegrityEngine {
     final name = fileName.substring(0, splitAt);
     final extension = fileName.substring(splitAt);
     return '$name ($copyNumber)$extension';
+  }
+
+  static Future<void> _validateDestination(
+      Directory root, Directory destination) async {
+    String normalize(String path) {
+      final value = Uri.file(path, windows: Platform.isWindows)
+          .normalizePath()
+          .toFilePath(windows: Platform.isWindows);
+      return Platform.isWindows ? value.toLowerCase() : value;
+    }
+
+    bool within(String base, String path) =>
+        path == base || path.startsWith('$base${Platform.pathSeparator}');
+
+    final rootPath = normalize(root.absolute.path);
+    final destinationPath = normalize(destination.absolute.path);
+    if (!within(rootPath, destinationPath)) {
+      throw FileSystemException(
+          'Destination escapes the selected root', destination.path);
+    }
+    if (!await root.exists()) return;
+    final realRoot = normalize(await root.resolveSymbolicLinks());
+    var current = root.absolute.path;
+    final relative = destinationPath.substring(rootPath.length);
+    for (final component in relative.split(Platform.pathSeparator)) {
+      if (component.isEmpty) continue;
+      current = '$current${Platform.pathSeparator}$component';
+      final directory = Directory(current);
+      if (!await directory.exists()) break;
+      final resolved = normalize(await directory.resolveSymbolicLinks());
+      if (!within(realRoot, resolved)) {
+        throw FileSystemException(
+            'Destination symlink escapes the selected root', directory.path);
+      }
+    }
   }
 
   static Future<Map<String, dynamic>?> _readCheckpoint(File file) async {

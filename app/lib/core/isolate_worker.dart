@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'integrity_engine.dart';
+import 'transfer_state_machine.dart';
 import 'perceptual_dedup.dart';
 import 'storage_provider.dart';
 import 'telemetry_tracker.dart';
@@ -236,6 +237,12 @@ Future<void> _runBatchIsolate(Map<String, Object?> request) async {
     if (!await destinationRoot.exists()) {
       await destinationRoot.create(recursive: true);
     }
+    if (_isSameOrChildPath(await sourceDir.resolveSymbolicLinks(),
+        await destinationRoot.resolveSymbolicLinks())) {
+      throw ArgumentError(
+        'The destination resolves inside the source directory.',
+      );
+    }
 
     final sourceRootPath = sourceDir.absolute.path;
     final tracker = TelemetryTracker();
@@ -275,9 +282,6 @@ Future<void> _runBatchIsolate(Map<String, Object?> request) async {
             : Directory(
                 '${destinationRoot.path}${Platform.pathSeparator}$relativeDirectory',
               );
-        if (!await destinationDir.exists()) {
-          await destinationDir.create(recursive: true);
-        }
 
         var injectedInterruption = false;
         var injectedDiskFull = false;
@@ -302,9 +306,12 @@ Future<void> _runBatchIsolate(Map<String, Object?> request) async {
           '${destinationDir.path}${Platform.pathSeparator}'
           '${file.uri.pathSegments.last}.checkpoint.json',
         );
+        final lifecycle = TransferStateMachine();
         final audit = await IntegrityEngine.verifiedOffload(
           source: file,
           destinationDir: destinationDir,
+          destinationRoot: destinationRoot,
+          lifecycle: lifecycle,
           checkpointBlockBytes: request['checkpointBlockBytes']! as int,
           onProgress: (fraction) async {
             final bytes = (fraction * fileSize).round();
@@ -369,6 +376,7 @@ Future<void> _runBatchIsolate(Map<String, Object?> request) async {
               count: entities.length,
               bytes: bytes,
               totalBytes: fileSize,
+              lifecycle: lifecycle,
             );
           },
         );
@@ -388,7 +396,7 @@ Future<void> _runBatchIsolate(Map<String, Object?> request) async {
         // Simulate an abrupt worker loss after the current checkpoint while
         // avoiding an OS-level process kill in the test runner.
         Isolate.exit();
-      } on _BatchCancelled {
+      } on TransferCancelledException {
         cancelled = true;
         break;
       } catch (error) {
@@ -481,9 +489,11 @@ class _BatchControl {
     required int count,
     required int bytes,
     required int totalBytes,
+    TransferStateMachine? lifecycle,
   }) async {
-    if (_cancelled) throw const _BatchCancelled();
+    if (_cancelled) throw const TransferCancelledException();
     if (_paused) {
+      lifecycle?.transition(TransferState.paused);
       sendProgress(
         path: path,
         index: index,
@@ -493,7 +503,8 @@ class _BatchControl {
         state: BatchProgressState.paused,
       );
       await _resumeGate!.future;
-      if (_cancelled) throw const _BatchCancelled();
+      if (_cancelled) throw const TransferCancelledException();
+      lifecycle?.transition(TransferState.copying);
       sendProgress(
         path: path,
         index: index,
@@ -523,10 +534,6 @@ class _BatchControl {
       'state': state.name,
     });
   }
-}
-
-class _BatchCancelled implements Exception {
-  const _BatchCancelled();
 }
 
 class _InjectedWorkerTermination implements Exception {
