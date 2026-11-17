@@ -475,6 +475,146 @@ void main() {
     expect(await part.exists(), isFalse);
   });
 
+  test('Recovers from a deterministic disk-full error and uncheckpointed tail',
+      () async {
+    final source = File('${controlDrive.path}/disk-full.bin');
+    await source.writeAsBytes(List<int>.generate(1024, (i) => i & 0xff));
+
+    final interrupted = await IsolateOffloadWorker.startVerifiedBatch(
+      sourceDirPath: controlDrive.path,
+      destDirPath: tempVault.path,
+      checkpointBlockBytes: 128,
+      faultInjection: const BatchFaultInjection(
+        diskFullAfterBytes: {'disk-full.bin': 128},
+      ),
+    );
+    final firstSummary = await interrupted.done;
+    expect(
+      firstSummary.failures.map((failure) => failure.relativePath),
+      contains('disk-full.bin'),
+    );
+
+    final part = File('${tempVault.path}/disk-full.bin.part');
+    expect(await part.length(), 145);
+    expect(await File('${tempVault.path}/disk-full.bin').exists(), isFalse);
+
+    final resumed = await IsolateOffloadWorker.startVerifiedBatch(
+      sourceDirPath: controlDrive.path,
+      destDirPath: tempVault.path,
+      checkpointBlockBytes: 128,
+    );
+    final recovered = await resumed.done;
+    final audit = recovered.results.single;
+    expect(audit.resumedBytes, 128);
+    expect(audit.byteForByteVerified, isTrue);
+    expect(await File('${tempVault.path}/disk-full.bin').readAsBytes(),
+        await source.readAsBytes());
+  });
+
+  test('Rejects an injected partial-file corruption before final promotion',
+      () async {
+    final source = File('${controlDrive.path}/corrupt-part.bin');
+    await source.writeAsBytes(List<int>.generate(1024, (i) => i & 0xff));
+
+    final job = await IsolateOffloadWorker.startVerifiedBatch(
+      sourceDirPath: controlDrive.path,
+      destDirPath: tempVault.path,
+      checkpointBlockBytes: 128,
+      faultInjection: const BatchFaultInjection(
+        corruptPartAfterBytes: {'corrupt-part.bin': 128},
+      ),
+    );
+    final summary = await job.done;
+
+    expect(
+      summary.failures.map((failure) => failure.relativePath),
+      contains('corrupt-part.bin'),
+    );
+    expect(
+      summary.results.any((audit) =>
+          audit.relativePath == 'corrupt-part.bin' &&
+          audit.byteForByteVerified),
+      isFalse,
+    );
+    expect(await File('${tempVault.path}/corrupt-part.bin').exists(), isFalse);
+    expect(await File('${tempVault.path}/corrupt-part.bin.part').exists(),
+        isFalse);
+  });
+
+  test('Falls back to the prior checkpoint after injected metadata corruption',
+      () async {
+    final source = File('${controlDrive.path}/corrupt-checkpoint.bin');
+    await source.writeAsBytes(List<int>.generate(1024, (i) => i & 0xff));
+
+    final interrupted = await IsolateOffloadWorker.startVerifiedBatch(
+      sourceDirPath: controlDrive.path,
+      destDirPath: tempVault.path,
+      checkpointBlockBytes: 128,
+      faultInjection: const BatchFaultInjection(
+        corruptCheckpointAfterBytes: {'corrupt-checkpoint.bin': 384},
+      ),
+    );
+    final firstSummary = await interrupted.done;
+    expect(
+      firstSummary.failures.map((failure) => failure.relativePath),
+      contains('corrupt-checkpoint.bin'),
+    );
+    expect(
+      await File('${tempVault.path}/corrupt-checkpoint.bin.checkpoint.json.bak')
+          .exists(),
+      isTrue,
+    );
+
+    final resumed = await IsolateOffloadWorker.startVerifiedBatch(
+      sourceDirPath: controlDrive.path,
+      destDirPath: tempVault.path,
+      checkpointBlockBytes: 128,
+    );
+    final recovered = await resumed.done;
+    final audit = recovered.results.single;
+    expect(audit.resumedBytes, 256);
+    expect(await File('${tempVault.path}/corrupt-checkpoint.bin').readAsBytes(),
+        await source.readAsBytes());
+  });
+
+  test('Restarts safely after abrupt batch-worker isolate termination',
+      () async {
+    final source = File('${controlDrive.path}/terminated.bin');
+    await source.writeAsBytes(List<int>.generate(1024, (i) => i & 0xff));
+
+    final terminated = await IsolateOffloadWorker.startVerifiedBatch(
+      sourceDirPath: controlDrive.path,
+      destDirPath: tempVault.path,
+      checkpointBlockBytes: 128,
+      faultInjection: const BatchFaultInjection(
+        terminateAfterBytes: {'terminated.bin': 128},
+      ),
+    );
+    await expectLater(
+      terminated.done.timeout(const Duration(seconds: 5)),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(await File('${tempVault.path}/terminated.bin').exists(), isFalse);
+    expect(await File('${tempVault.path}/terminated.bin.part').length(), 128);
+    expect(
+      await File('${tempVault.path}/terminated.bin.checkpoint.json').exists(),
+      isTrue,
+    );
+
+    final restarted = await IsolateOffloadWorker.startVerifiedBatch(
+      sourceDirPath: controlDrive.path,
+      destDirPath: tempVault.path,
+      checkpointBlockBytes: 128,
+    );
+    final recovered = await restarted.done;
+    final audit = recovered.results.single;
+    expect(audit.resumedBytes, 128);
+    expect(audit.byteForByteVerified, isTrue);
+    expect(await File('${tempVault.path}/terminated.bin').readAsBytes(),
+        await source.readAsBytes());
+  });
+
   test('Streams progress and cancels at a checkpoint that resumes safely',
       () async {
     final source = File('${controlDrive.path}/large.bin');

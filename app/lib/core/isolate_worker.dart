@@ -63,15 +63,25 @@ class BatchProgressEvent {
 }
 
 /// Deterministic storage faults used by tests and the local chaos demo.
-/// Keys are source-relative paths; interruption happens after a saved block.
+/// Keys are source-relative paths; byte thresholds run after a saved block.
+/// Disk-full injection leaves a torn tail, and termination exits only the
+/// worker isolate (it does not simulate killing the operating-system process).
 class BatchFaultInjection {
   final Map<String, int> failAfterBytes;
   final Set<String> failBeforeTransfer;
+  final Map<String, int> diskFullAfterBytes;
+  final Map<String, int> corruptPartAfterBytes;
+  final Map<String, int> corruptCheckpointAfterBytes;
+  final Map<String, int> terminateAfterBytes;
   final int chunkDelayMs;
 
   const BatchFaultInjection({
     this.failAfterBytes = const {},
     this.failBeforeTransfer = const {},
+    this.diskFullAfterBytes = const {},
+    this.corruptPartAfterBytes = const {},
+    this.corruptCheckpointAfterBytes = const {},
+    this.terminateAfterBytes = const {},
     this.chunkDelayMs = 0,
   });
 }
@@ -102,9 +112,26 @@ class IsolateOffloadWorker {
     BatchFaultInjection faultInjection = const BatchFaultInjection(),
   }) async {
     final receivePort = ReceivePort();
+    final exitPort = ReceivePort();
     final ready = Completer<SendPort>();
     final done = Completer<BatchOffloadSummary>();
     final progress = StreamController<BatchProgressEvent>();
+
+    exitPort.listen((_) {
+      // The worker can exit immediately after sending its final message. Give
+      // the normal event queue a turn before treating an exit as unexpected.
+      Timer.run(() {
+        if (done.isCompleted) return;
+        final error = StateError(
+          'Batch worker exited before reporting completion.',
+        );
+        if (!ready.isCompleted) ready.completeError(error);
+        if (!done.isCompleted) done.completeError(error);
+        progress.close();
+        receivePort.close();
+        exitPort.close();
+      });
+    });
 
     receivePort.listen((dynamic message) {
       final event = Map<Object?, Object?>.from(message as Map);
@@ -128,6 +155,7 @@ class IsolateOffloadWorker {
           }
           progress.close();
           receivePort.close();
+          exitPort.close();
           break;
         case 'fatal':
           if (!done.isCompleted) {
@@ -135,6 +163,7 @@ class IsolateOffloadWorker {
           }
           progress.close();
           receivePort.close();
+          exitPort.close();
           break;
       }
     });
@@ -149,9 +178,15 @@ class IsolateOffloadWorker {
           'checkpointBlockBytes': checkpointBlockBytes,
           'failAfterBytes': faultInjection.failAfterBytes,
           'failBeforeTransfer': faultInjection.failBeforeTransfer.toList(),
+          'diskFullAfterBytes': faultInjection.diskFullAfterBytes,
+          'corruptPartAfterBytes': faultInjection.corruptPartAfterBytes,
+          'corruptCheckpointAfterBytes':
+              faultInjection.corruptCheckpointAfterBytes,
+          'terminateAfterBytes': faultInjection.terminateAfterBytes,
           'chunkDelayMs': faultInjection.chunkDelayMs,
           'events': receivePort.sendPort,
         },
+        onExit: exitPort.sendPort,
       );
       final control = await ready.future;
       return BatchOffloadJob._(
@@ -161,6 +196,7 @@ class IsolateOffloadWorker {
       );
     } catch (_) {
       receivePort.close();
+      exitPort.close();
       await progress.close();
       rethrow;
     }
@@ -244,8 +280,28 @@ Future<void> _runBatchIsolate(Map<String, Object?> request) async {
         }
 
         var injectedInterruption = false;
+        var injectedDiskFull = false;
+        var injectedPartCorruption = false;
+        var injectedCheckpointCorruption = false;
         final failAfterBytes =
             (request['failAfterBytes']! as Map)[normalizedPath] as int?;
+        final diskFullAfterBytes =
+            (request['diskFullAfterBytes']! as Map)[normalizedPath] as int?;
+        final corruptPartAfterBytes =
+            (request['corruptPartAfterBytes']! as Map)[normalizedPath] as int?;
+        final corruptCheckpointAfterBytes =
+            (request['corruptCheckpointAfterBytes']! as Map)[normalizedPath]
+                as int?;
+        final terminateAfterBytes =
+            (request['terminateAfterBytes']! as Map)[normalizedPath] as int?;
+        final partFile = File(
+          '${destinationDir.path}${Platform.pathSeparator}'
+          '${file.uri.pathSegments.last}.part',
+        );
+        final checkpointFile = File(
+          '${destinationDir.path}${Platform.pathSeparator}'
+          '${file.uri.pathSegments.last}.checkpoint.json',
+        );
         final audit = await IntegrityEngine.verifiedOffload(
           source: file,
           destinationDir: destinationDir,
@@ -266,6 +322,42 @@ Future<void> _runBatchIsolate(Map<String, Object?> request) async {
               injectedInterruption = true;
               throw FileSystemException(
                   'Injected transfer interruption', file.path);
+            }
+            if (!injectedDiskFull &&
+                diskFullAfterBytes != null &&
+                bytes >= diskFullAfterBytes) {
+              injectedDiskFull = true;
+              // Preserve an uncheckpointed tail to model a write that ran out
+              // of space between block boundaries. Recovery must truncate it.
+              await partFile.writeAsBytes(
+                List<int>.filled(17, 0xee),
+                mode: FileMode.append,
+              );
+              throw FileSystemException(
+                'Injected disk full after $bytes bytes',
+                file.path,
+              );
+            }
+            if (!injectedPartCorruption &&
+                corruptPartAfterBytes != null &&
+                bytes >= corruptPartAfterBytes) {
+              injectedPartCorruption = true;
+              await _flipFirstByte(partFile);
+            }
+            if (!injectedCheckpointCorruption &&
+                corruptCheckpointAfterBytes != null &&
+                bytes >= corruptCheckpointAfterBytes) {
+              injectedCheckpointCorruption = true;
+              await checkpointFile.writeAsString('{torn checkpoint');
+              throw FileSystemException(
+                'Injected checkpoint corruption after $bytes bytes',
+                checkpointFile.path,
+              );
+            }
+            if (terminateAfterBytes != null && bytes >= terminateAfterBytes) {
+              // Let the transfer engine close its handles, then exit before
+              // the batch can report a completed summary.
+              throw const _InjectedWorkerTermination();
             }
             final delayMs = request['chunkDelayMs']! as int;
             if (delayMs > 0) {
@@ -292,6 +384,10 @@ Future<void> _runBatchIsolate(Map<String, Object?> request) async {
           totalBytes: audit.byteSize,
           state: BatchProgressState.fileComplete,
         );
+      } on _InjectedWorkerTermination {
+        // Simulate an abrupt worker loss after the current checkpoint while
+        // avoiding an OS-level process kill in the test runner.
+        Isolate.exit();
       } on _BatchCancelled {
         cancelled = true;
         break;
@@ -431,6 +527,33 @@ class _BatchControl {
 
 class _BatchCancelled implements Exception {
   const _BatchCancelled();
+}
+
+class _InjectedWorkerTermination implements Exception {
+  const _InjectedWorkerTermination();
+}
+
+Future<void> _flipFirstByte(File file) async {
+  if (await file.length() == 0) {
+    throw FileSystemException(
+        'Cannot corrupt an empty partial file', file.path);
+  }
+  final reader = await file.open(mode: FileMode.read);
+  late final int originalByte;
+  try {
+    originalByte = await reader.readByte();
+  } finally {
+    await reader.close();
+  }
+
+  final writer = await file.open(mode: FileMode.writeOnly);
+  try {
+    await writer.setPosition(0);
+    await writer.writeByte(originalByte ^ 1);
+    await writer.flush();
+  } finally {
+    await writer.close();
+  }
 }
 
 String _relativeFilePath(String sourceRoot, String absoluteFilePath) {
